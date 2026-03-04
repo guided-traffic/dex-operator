@@ -34,14 +34,28 @@ Jede referenziert eine DexInstallation per Name+Namespace und enthält die typ-s
 
 ---
 
+# Important Notes
+
+- Remember Cyclomatic Complexity: Keep it under 15 for all functions. Refactor if it exceeds this threshold.
+- Check Code linting and formatting before reporing task done
+- We have Unit-Tests, Integration-Tests and E2E-Tests. Always write tests for new features and bug fixes. Aim for high coverage, especially for critical reconciliation logic.
+- Use the Makefile targets for all testing, linting, and analysis tasks. Do not run Go test commands or tools directly. This ensures consistency between local development and CI pipelines.
+- For E2E tests, focus on real-world scenarios like rolling updates, failover, and recovery. Use actual Valkey instances to verify behavior.
+- Do not commit to git, ask the user for a review and let the user commit to git. This ensures that the user is aware of all changes and can provide feedback before they are finalized.
+- if you need to write temporary files, write them to local tmp-folder. Do not use the system tmp folder at /tmp
+- persist important information about the project and implementation in this file
+- if you are done with your task, always report a conventional commit message to the user, but do not commit to git. Let the user review and commit to git. This ensures that the user is aware of all changes and can provide feedback before they are finalized.
+
+---
+
 ## Projektplan
 
 ### Phase 1: Projekt-Setup
-- [ ] Go-Modul initialisieren (`go mod init github.com/guided-traffic/dex-operator`)
-- [ ] Kubebuilder-Projektstruktur anlegen (cmd/, internal/, api/, config/)
-- [ ] Boilerplate-Dateien (hack/boilerplate.go.txt, main.go)
-- [ ] Kopierte CI-Dateien anpassen (Makefile, package.json, Containerfile, workflows, .releaserc.json, renovate.json — valkey-operator → dex-operator)
-- [ ] README.md aktualisieren
+- [x] Go-Modul initialisieren (`go mod init github.com/guided-traffic/dex-operator`)
+- [x] Kubebuilder-Projektstruktur anlegen (cmd/, internal/, api/, config/)
+- [x] Boilerplate-Dateien (hack/boilerplate.go.txt, main.go)
+- [x] Kopierte CI-Dateien anpassen (Makefile, package.json, Containerfile, workflows, .releaserc.json, renovate.json — valkey-operator → dex-operator)
+- [x] README.md aktualisieren
 
 ### Phase 2: CRD-Typen definieren (api/v1/)
 - [ ] DexInstallation types + deepcopy
