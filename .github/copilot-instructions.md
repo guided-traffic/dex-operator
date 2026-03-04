@@ -109,13 +109,13 @@ File-path-only certs (SAML `ca`, client TLS, service accounts) are added to `Mou
 - [x] Unit-Tests für Config-Builder → `internal/builder/builder_test.go`
 
 ### Phase 4: Controller
-- [ ] DexInstallation Controller (Reconciler): Config + Env Secret schreiben
-- [ ] DexStaticClient Controller: DexInstallation re-reconcile triggern
-- [ ] Connector Controller (generisch oder pro Typ): DexInstallation re-reconcile triggern
-- [ ] Namespace-Whitelist-Validierung
-- [ ] Optionaler Rollout-Restart Logik
-- [ ] RBAC-Konfiguration (Secrets lesen/schreiben, Deployments patchen)
-- [ ] Unit-Tests für Controller
+- [x] DexInstallation Controller (Reconciler): Config + Env Secret schreiben
+- [x] DexStaticClient Controller: DexInstallation re-reconcile triggern
+- [x] Connector Controller (generisch oder pro Typ): DexInstallation re-reconcile triggern
+- [x] Namespace-Whitelist-Validierung
+- [x] Optionaler Rollout-Restart Logik
+- [x] RBAC-Konfiguration (Secrets lesen/schreiben, Deployments patchen)
+- [x] Unit-Tests für Controller
 
 ### Phase 5: Integration & E2E Tests
 - [ ] Integration-Tests mit envtest

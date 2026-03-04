@@ -30,6 +30,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	dexv1 "github.com/guided-traffic/dex-operator/api/v1"
+	"github.com/guided-traffic/dex-operator/internal/controller"
 )
 
 var (
@@ -88,6 +89,19 @@ func main() {
 	}
 	if err = mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
+		os.Exit(1)
+	}
+
+	if err = (&controller.DexInstallationReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create DexInstallation controller")
+		os.Exit(1)
+	}
+
+	if err = controller.SetupConnectorControllers(mgr); err != nil {
+		setupLog.Error(err, "unable to create connector controllers")
 		os.Exit(1)
 	}
 
