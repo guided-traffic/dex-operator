@@ -1,0 +1,20 @@
+{
+  "name": "valkey-operator",
+  "version": "0.0.0-development",
+  "description": "A Kubernetes operator for managing Valkey and Sentinel instances",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/guided-traffic/valkey-operator.git"
+  },
+  "author": "Guided Traffic",
+  "license": "Apache-2.0",
+  "private": true,
+  "devDependencies": {
+    "@semantic-release/commit-analyzer": "13.0.1",
+    "@semantic-release/git": "10.0.1",
+    "@semantic-release/github": "12.0.5",
+    "@semantic-release/release-notes-generator": "14.1.0",
+    "conventional-changelog-conventionalcommits": "9.2.0",
+    "semantic-release": "25.0.3"
+  }
+}

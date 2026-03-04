@@ -1,0 +1,208 @@
+name: Release Docker & Helm
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  actions: read
+  attestations: write
+
+jobs:
+  build:
+    name: Build Docker Image
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:v0.12.0
+            network=host
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: guidedtraffic
+          password: ${{ secrets.DOCKERHUB_PAT }}
+
+      - name: Docker meta
+        id: tag_names
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            guidedtraffic/valkey-operator
+          tags: |
+            type=schedule
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+          labels: |
+            org.opencontainers.image.title=Valkey Operator
+            org.opencontainers.image.description=A Kubernetes operator for managing Valkey and Sentinel instances
+            org.opencontainers.image.vendor=Guided Traffic
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.documentation=https://github.com/guided-traffic/valkey-operator
+            org.opencontainers.image.source=https://github.com/guided-traffic/valkey-operator
+
+      - name: Get current epoch time
+        id: time
+        run: echo "epoch=$(date +%s)" >> $GITHUB_OUTPUT
+
+      - name: Extract version without v prefix
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Extracted version: ${VERSION}"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        id: build
+        with:
+          file: Containerfile
+          context: .
+          build-args: |
+            BUILD_NUMBER=${{ steps.version.outputs.version }}
+            GIT_COMMIT=${{ github.sha }}
+            BUILD_TIME=${{ steps.time.outputs.epoch }}
+          platforms: linux/amd64  # ,linux/arm64
+          push: true
+          tags: ${{ steps.tag_names.outputs.tags }}
+          labels: ${{ steps.tag_names.outputs.labels }}
+          # ERROR: failed to build: failed to solve: failed to parse error response 400: <h2>Our services aren't available right now</h2><p>We're working to restore all services as soon as possible. Please check back soon.
+          # cache-from: type=gha
+          # cache-to: type=gha,mode=max
+          # Security features for better Docker Hub score
+          provenance: true
+          sbom: true
+          # Enable attestation features
+          outputs: type=image,name=target,annotation-index.org.opencontainers.image.description=Valkey Operator
+
+      - name: Generate and upload SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: guidedtraffic/valkey-operator:${{ steps.version.outputs.version }}
+          format: spdx-json
+          upload-artifact: true
+          upload-release-assets: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload SBOM to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ github.workspace }}/guidedtraffic-valkey-operator_*.spdx.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker Scout scan
+        uses: docker/scout-action@v1
+        with:
+          command: cves
+          image: guidedtraffic/valkey-operator:${{ steps.version.outputs.version }}
+          sarif-file: scout-report.sarif
+          summary: true
+          dockerhub-user: guidedtraffic
+          dockerhub-password: ${{ secrets.DOCKERHUB_PAT }}
+
+  release-helm-gh:
+    name: Release Helm Chart to GitHub Pages
+    needs: build
+    runs-on: self-hosted
+    permissions:
+      contents: write
+      pages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.12.0
+
+      - name: Update Chart Version
+        run: |
+          # Extrahiere Version aus dem Release-Tag (ohne 'v' Prefix)
+          VERSION=${GITHUB_REF_NAME#v}
+          # Aktualisiere Chart und App Version
+          sed -i "s/^version:.*$/version: ${VERSION}/" deploy/helm/valkey-operator/Chart.yaml
+          sed -i "s/^appVersion:.*$/appVersion: \"${VERSION}\"/" deploy/helm/valkey-operator/Chart.yaml
+          # Aktualisiere Image Tag in values.yaml
+          sed -i "s/^  tag:.*$/  tag: \"${VERSION}\"/" deploy/helm/valkey-operator/values.yaml
+
+      - name: Create Helm Package
+        run: |
+          cd deploy/helm
+          helm package valkey-operator/
+          mkdir -p repo
+          mv *.tgz repo/
+          # Erstelle temporären Index für das neue Chart
+          helm repo index repo/ --url https://guided-traffic.github.io/valkey-operator/
+          cd ../..
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Save Chart Package
+        run: |
+          mkdir -p /tmp/helm-charts
+          cp -r deploy/helm/repo/* /tmp/helm-charts/
+
+      - name: Checkout gh-pages branch
+        uses: actions/checkout@v6
+        with:
+          ref: gh-pages
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to GitHub Pages
+        run: |
+          # Kopiere neue Charts ins Root-Verzeichnis
+          cp /tmp/helm-charts/*.tgz .
+
+          # Merge mit existierendem index.yaml falls vorhanden
+          if [ -f index.yaml ]; then
+            # Erstelle temporären Ordner für Merge
+            mkdir -p temp-repo
+            cp *.tgz temp-repo/
+            # Merge mit existierendem Index
+            helm repo index temp-repo/ --url https://guided-traffic.github.io/valkey-operator/ --merge index.yaml
+            cp temp-repo/index.yaml .
+            rm -rf temp-repo
+          else
+            # Erstelle neuen Index falls keiner existiert
+            helm repo index . --url https://guided-traffic.github.io/valkey-operator/
+          fi
+
+          git add --force *.tgz index.yaml
+          git commit -m "Release Helm chart for $GITHUB_REF_NAME"
+          git push --force origin gh-pages
+
+      - name: Update Release Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            *.tgz
+            index.yaml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

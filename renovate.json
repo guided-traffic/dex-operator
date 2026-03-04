@@ -1,0 +1,263 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":assignee(hans-fischer)",
+    ":semanticCommits",
+    ":automergeDigest",
+    ":automergeBranch"
+  ],
+  "schedule": ["at any time"],
+  "timezone": "Europe/Berlin",
+  "labels": [
+    "dependencies"
+  ],
+  "platformAutomerge": true,
+  "automergeType": "pr",
+  "automergeStrategy": "squash",
+  "ignoreTests": false,
+  "prConcurrentLimit": 5,
+  "rebaseWhen": "conflicted",
+  "postUpdateOptions": [
+    "gomodTidy",
+    "gomodUpdateImportPaths"
+  ],
+  "packageRules": [
+    {
+      "description": "Go version: group all Go version updates together to keep them in sync (Containerfile, go.mod, release-template.hbs)",
+      "matchDatasources": [
+        "golang-version"
+      ],
+      "groupName": "Go version",
+      "groupSlug": "go-version"
+    },
+    {
+      "description": "Go version: automerge minor and patch updates after CI passes",
+      "matchDatasources": [
+        "golang-version"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "automerge": true
+    },
+    {
+      "description": "Go version: require manual review for major updates",
+      "matchDatasources": [
+        "golang-version"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false,
+      "labels": [
+        "dependencies",
+        "major-update"
+      ]
+    },
+    {
+      "description": "Go modules: automerge minor and patch updates after CI passes",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchDepTypes": [
+        "require"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "automerge": true
+    },
+    {
+      "description": "Go modules: require manual review for major updates",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchDepTypes": [
+        "require"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false,
+      "labels": [
+        "dependencies",
+        "major-update"
+      ]
+    },
+    {
+      "description": "Docker base images (non-Go): automerge minor and patch updates",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "automerge": true
+    },
+    {
+      "description": "Docker base images: require manual review for major updates",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false,
+      "labels": [
+        "dependencies",
+        "major-update"
+      ]
+    },
+    {
+      "description": "GitHub Actions: automerge minor and patch updates",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "automerge": true
+    },
+    {
+      "description": "GitHub Actions: require manual review for major updates",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false,
+      "labels": [
+        "dependencies",
+        "major-update"
+      ]
+    },
+    {
+      "description": "Helm charts: automerge minor and patch updates",
+      "matchManagers": [
+        "helm-values",
+        "helmv3"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "automerge": true
+    },
+    {
+      "description": "Helm charts: require manual review for major updates",
+      "matchManagers": [
+        "helm-values",
+        "helmv3"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false,
+      "labels": [
+        "dependencies",
+        "major-update"
+      ]
+    },
+    {
+      "description": "Group Kubernetes-related Go dependencies",
+      "matchManagers": [
+        "gomod"
+      ],
+      "groupName": "Kubernetes Go modules",
+      "groupSlug": "k8s-go-modules",
+      "matchPackageNames": [
+        "/^k8s.io//",
+        "/^sigs.k8s.io//"
+      ]
+    },
+    {
+      "description": "Use 'fix' instead of 'chore' for dependency updates",
+      "semanticCommitType": "fix",
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pin"
+      ]
+    },
+    {
+      "description": "GitHub Actions: use 'chore' instead of 'fix' for updates",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "semanticCommitType": "chore"
+    }
+  ],
+  "customManagers": [
+    {
+      "description": "Update Go version in Containerfile",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Containerfile$/",
+        "/^Dockerfile$/"
+      ],
+      "matchStrings": [
+        "FROM\\s+golang:(?<currentValue>[\\d.]+)-alpine"
+      ],
+      "depNameTemplate": "golang",
+      "datasourceTemplate": "golang-version",
+      "versioningTemplate": "semver"
+    },
+    {
+      "description": "Update Go version in go.mod",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^go\\.mod$/"
+      ],
+      "matchStrings": [
+        "\\ngo\\s+(?<currentValue>[\\d.]+)\\n"
+      ],
+      "depNameTemplate": "golang",
+      "datasourceTemplate": "golang-version",
+      "versioningTemplate": "semver"
+    },
+    {
+      "description": "Update Go version in release-template.hbs badge (major.minor only)",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/release-template\\.hbs$/"
+      ],
+      "matchStrings": [
+        "go-(?<currentValue>\\d+\\.\\d+)-blue"
+      ],
+      "depNameTemplate": "golang",
+      "datasourceTemplate": "golang-version",
+      "versioningTemplate": "semver",
+      "extractVersionTemplate": "^(?<version>\\d+\\.\\d+)"
+    },
+    {
+      "description": "Update Go version in GitHub workflows",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.*\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "GO_VERSION:\\s+['\"]?(?<currentValue>[\\d.]+)['\"]?"
+      ],
+      "depNameTemplate": "golang",
+      "datasourceTemplate": "golang-version",
+      "versioningTemplate": "semver"
+    }
+  ],
+  "gomod": {
+    "enabled": true,
+    "postUpdateOptions": [
+      "gomodTidy",
+      "gomodUpdateImportPaths"
+    ]
+  }
+}

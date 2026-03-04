@@ -1,0 +1,44 @@
+name: Renovate Application
+on:
+  # Täglich um 2 Uhr morgens UTC ausführen
+  schedule:
+    - cron: '0 2 * * *'
+  # Nach jedem Push auf main
+  push:
+    branches:
+      - main
+  # Manueller Trigger
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: 'Renovate log level'
+        required: false
+        default: 'info'
+        type: choice
+        options:
+          - info
+          - debug
+          - warn
+          - error
+
+permissions:
+  contents: read
+
+jobs:
+  renovate:
+    runs-on: self-hosted
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Self-hosted Renovate
+        uses: renovatebot/github-action@v46.1.3
+        with:
+          token: ${{ secrets.BOT_PAT }}
+          configurationFile: renovate.json
+        env:
+          LOG_LEVEL: ${{ inputs.logLevel || 'info' }}
+          RENOVATE_AUTODISCOVER: 'true'
+          RENOVATE_AUTODISCOVER_FILTER: 'guided-traffic/valkey-operator'
+          RENOVATE_REQUIRE_CONFIG: 'required'

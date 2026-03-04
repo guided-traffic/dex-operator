@@ -1,0 +1,756 @@
+name: Test and Release
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write  # For PR comments
+  issues: write         # For issue comments
+
+env:
+  GO_VERSION: '1.26.0'
+  KUBERNETES_VERSION: '1.33.4'
+
+jobs:
+  e2e-tests:
+    name: E2E Tests
+    runs-on: self-hosted
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: guidedtraffic
+          password: ${{ secrets.DOCKERHUB_PAT }}
+
+      - name: Create Kind config for DinD
+        run: |
+          cat << EOF > kind-config.yaml
+          kind: Cluster
+          apiVersion: kind.x-k8s.io/v1alpha4
+          name: valkey-operator-test
+          nodes:
+          - role: control-plane
+          # Use native snapshotter to avoid nested overlay issues in DinD
+          containerdConfigPatches:
+          - |-
+            [plugins."io.containerd.grpc.v1.cri".containerd]
+              snapshotter = "native"
+              disable_snapshot_annotations = false
+          EOF
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'v${{ env.KUBERNETES_VERSION }}'
+
+      - name: Create Kind cluster
+        id: kind-cluster
+        continue-on-error: true
+        uses: helm/kind-action@v1.14.0
+        with:
+          version: v0.30.0
+          node_image: kindest/node:v${{ env.KUBERNETES_VERSION }}
+          cluster_name: valkey-operator-test
+          wait: 120s
+          ignore_failed_clean: true
+          config: kind-config.yaml
+
+      - name: Verify Kind cluster
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Build and load operator image
+        run: |
+          make docker-build IMG=valkey-operator:test
+          # Import image - containerd will automatically use the native snapshotter from config
+          # Don't specify --snapshotter flag to avoid platform unpacking issues
+          docker save valkey-operator:test | docker exec -i valkey-operator-test-control-plane ctr --namespace=k8s.io images import -
+
+      - name: Verify image in cluster
+        run: |
+          echo "=== Verifying image is available in Kind cluster ==="
+          docker exec valkey-operator-test-control-plane crictl images | grep valkey-operator || {
+            echo "ERROR: Image not found in cluster!"
+            echo "Available images:"
+            docker exec valkey-operator-test-control-plane crictl images
+            exit 1
+          }
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.16.3'
+
+      - name: Debug cluster state
+        run: |
+          echo "=== Cluster info ==="
+          kubectl cluster-info
+          echo "=== Nodes ==="
+          kubectl get nodes -o wide
+          echo "=== Namespaces ==="
+          kubectl get namespaces
+          echo "=== Storage classes ==="
+          kubectl get storageclass
+
+      - name: Install operator via Helm
+        id: helm-install
+        continue-on-error: true
+        run: |
+          helm install valkey-operator deploy/helm/valkey-operator \
+            --namespace valkey-operator-system \
+            --create-namespace \
+            --values test/e2e/helm-values.yaml \
+            --set image.repository=valkey-operator \
+            --set image.tag=test \
+            --wait \
+            --timeout 180s \
+            --debug
+
+      - name: Debug Helm install failure
+        if: steps.helm-install.outcome == 'failure'
+        run: |
+          echo "=== Helm install failed, collecting diagnostics ==="
+          echo "=== Pods in operator namespace ==="
+          kubectl -n valkey-operator-system get pods -o wide || true
+
+          echo ""
+          echo "=== Get Pod Names ==="
+          POD_NAME=$(kubectl -n valkey-operator-system get pods -l app.kubernetes.io/name=valkey-operator -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          echo "Pod name: ${POD_NAME}"
+
+          if [ -n "$POD_NAME" ]; then
+            echo ""
+            echo "=== Operator logs (current attempt) ==="
+            kubectl -n valkey-operator-system logs "$POD_NAME" --tail=100 2>&1 || echo "No current logs available"
+
+            echo ""
+            echo "=== Operator logs (previous crash) ==="
+            kubectl -n valkey-operator-system logs "$POD_NAME" --previous --tail=100 2>&1 || echo "No previous logs available"
+          fi
+
+          echo ""
+          echo "=== Describe pods ==="
+          kubectl -n valkey-operator-system describe pods || true
+
+          echo ""
+          echo "=== Events ==="
+          kubectl -n valkey-operator-system get events --sort-by='.lastTimestamp' || true
+
+          echo ""
+          echo "=== ConfigMap content ==="
+          kubectl -n valkey-operator-system get configmap -l app.kubernetes.io/name=valkey-operator -o yaml || true
+
+          echo ""
+          echo "=== ServiceAccount ==="
+          kubectl -n valkey-operator-system get serviceaccount valkey-operator -o yaml || true
+
+          echo ""
+          echo "=== RBAC ==="
+          kubectl get clusterrolebinding | grep valkey-operator || true
+          kubectl describe clusterrolebinding valkey-operator || true
+
+          exit 1
+
+      - name: Install cert-manager
+        run: |
+          kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml
+          echo "Waiting for cert-manager to be ready..."
+          kubectl wait --for=condition=Available deployment/cert-manager -n cert-manager --timeout=120s
+          kubectl wait --for=condition=Available deployment/cert-manager-webhook -n cert-manager --timeout=120s
+          kubectl wait --for=condition=Available deployment/cert-manager-cainjector -n cert-manager --timeout=120s
+          echo "Creating self-signed ClusterIssuer..."
+          sleep 5
+          kubectl apply -f test/e2e/testdata/cert-manager-issuer.yaml
+
+      - name: Wait for operator
+        run: kubectl -n valkey-operator-system wait --for=condition=available --timeout=120s deployment/valkey-operator
+
+      - name: Run E2E tests
+        run: make test-e2e
+        env:
+          E2E_TESTS: "true"
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          echo "=== Operator logs ==="
+          kubectl -n valkey-operator-system logs -l app.kubernetes.io/name=valkey-operator --tail=100 || true
+          echo "=== Describe pods ==="
+          kubectl -n valkey-operator-system describe pods || true
+          echo "=== Events ==="
+          kubectl -n valkey-operator-system get events --sort-by='.lastTimestamp' || true
+
+      - name: Cleanup Kind cluster
+        if: always()
+        run: kind delete cluster --name valkey-operator-test || true
+
+  linter:
+    name: Code Linting
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+
+      - name: Run linting
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6
+          make lint
+
+  gosec:
+    name: GoSec Security Scan
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+
+      - name: Run GoSec security scan
+        run: make gosec
+
+
+  malware-scan:
+    name: Malware Scan (Source Code)
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install ClamAV
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clamav clamav-daemon
+
+      - name: Update ClamAV database
+        run: |
+          sudo systemctl stop clamav-freshclam || true
+          sudo freshclam
+
+      - name: Run ClamAV scan on source code
+        run: |
+          echo "🔍 Scanning source code for malware..."
+          clamscan --recursive --infected --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=vendor . | tee clamav-report.txt
+
+          # Check if any infected files were found
+          if grep -q "Infected files: 0" clamav-report.txt; then
+            echo "✅ No malware detected in source code"
+          else
+            echo "❌ MALWARE DETECTED! Blocking release."
+            cat clamav-report.txt
+            exit 1
+          fi
+
+      - name: Upload ClamAV report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: clamav-report
+          path: clamav-report.txt
+          retention-days: 30
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+
+      - name: Run unit tests with coverage
+        run: make test-unit-coverage
+
+      - name: Upload unit coverage artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit-coverage
+          path: coverage/unit.out
+          retention-days: 7
+
+  govulncheck:
+    name: Vulnerability Check
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+
+      - name: Run vulnerability check
+        run: make vuln
+
+  cyclomatic-complexity:
+    name: Cyclomatic Complexity
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+
+      - name: Install gocyclo
+        run: go install github.com/fzipp/gocyclo/cmd/gocyclo@v0.6.0
+
+      - name: Run cyclomatic complexity check
+        run: make cyclo
+
+      - name: Generate complexity report
+        if: always()
+        run: |
+          echo "## 📊 Cyclomatic Complexity Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Top 20 most complex functions:" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          gocyclo -top 20 . >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> Threshold: 15 (functions above this are flagged)" >> $GITHUB_STEP_SUMMARY
+
+  integration-tests:
+    name: Integration Tests (envtest)
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+
+      - name: Run integration tests with coverage
+        run: make test-integration-coverage
+
+      - name: Upload integration coverage artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: integration-coverage
+          path: coverage/integration.out
+          retention-days: 7
+
+  coverage-report:
+    name: Combined Coverage Report
+    runs-on: self-hosted
+    needs: [unit-tests, integration-tests]
+    if: always() && (needs.unit-tests.result == 'success' || needs.integration-tests.result == 'success')
+    permissions:
+      contents: read  # Read only - semantic-release will commit the badge
+      pull-requests: write  # Needed to comment on PRs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Download unit test coverage
+        uses: actions/download-artifact@v8
+        with:
+          name: unit-coverage
+        continue-on-error: true
+
+      - name: Download integration test coverage
+        uses: actions/download-artifact@v8
+        with:
+          name: integration-coverage
+        continue-on-error: true
+
+      - name: Merge coverage reports
+        id: merge-coverage
+        run: |
+          echo "Merging coverage reports..."
+
+          # Check which coverage files exist
+          COVERAGE_FILES=""
+          if [ -f "unit.out" ]; then
+            echo "✓ Unit test coverage found"
+            COVERAGE_FILES="$COVERAGE_FILES unit.out"
+          fi
+          if [ -f "integration.out" ]; then
+            echo "✓ Integration test coverage found"
+            COVERAGE_FILES="$COVERAGE_FILES integration.out"
+          fi
+
+          if [ -z "$COVERAGE_FILES" ]; then
+            echo "ERROR: No coverage files found"
+            exit 1
+          fi
+
+          # Merge coverage files
+          echo "mode: set" > coverage-merged.out
+          grep -h -v "^mode:" $COVERAGE_FILES >> coverage-merged.out || true
+
+          # Generate reports
+          mkdir -p coverage
+          go tool cover -func=coverage-merged.out > coverage/coverage.txt
+          go tool cover -html=coverage-merged.out -o coverage/coverage.html
+
+          # Extract total coverage
+          TOTAL_COVERAGE=$(grep "total:" coverage/coverage.txt | awk '{print $3}' | sed 's/%//')
+          echo "percentage=$TOTAL_COVERAGE" >> $GITHUB_OUTPUT
+          echo ""
+          echo "========================================"
+          echo "📊 Combined Coverage: ${TOTAL_COVERAGE}%"
+          echo "========================================"
+
+          # Extract coverage by package for detailed report
+          echo "## Coverage by Package" > coverage/summary.txt
+          grep -v "total:" coverage/coverage.txt | awk '{printf "- **%s**: %s\n", $1, $3}' >> coverage/summary.txt || true
+
+          # Store coverage text for PR comment
+          {
+            echo "coverage_text<<EOF"
+            cat coverage/coverage.txt
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+          # Add to step summary
+          echo "## Combined Coverage Report" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat coverage/coverage.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload combined coverage report
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-combined
+          path: coverage/
+
+      - name: Create coverage badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          COVERAGE="${{ steps.merge-coverage.outputs.percentage }}"
+
+          # Determine badge color based on coverage using Python (more reliable than bc)
+          COLOR=$(python3 -c "
+          coverage = float('$COVERAGE')
+          if coverage >= 90:
+              print('brightgreen')
+          elif coverage >= 80:
+              print('green')
+          elif coverage >= 70:
+              print('yellow')
+          elif coverage >= 60:
+              print('orange')
+          else:
+              print('red')
+          ")
+
+          # Create JSON for shields.io endpoint badge
+          mkdir -p .github/badges
+          cat > .github/badges/coverage.json << EOF
+          {
+            "schemaVersion": 1,
+            "label": "coverage",
+            "message": "${COVERAGE}%",
+            "color": "${COLOR}"
+          }
+          EOF
+
+          echo "Coverage badge created: ${COVERAGE}% (${COLOR})"
+
+      - name: Upload coverage badge as artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-badge
+          path: .github/badges/coverage.json
+
+      - name: Get main branch coverage
+        if: github.event_name == 'pull_request'
+        id: main-coverage
+        continue-on-error: true
+        run: |
+          # Try to fetch coverage from main branch badge
+          MAIN_COVERAGE="N/A"
+          MAIN_BADGE_URL="https://raw.githubusercontent.com/${{ github.repository }}/main/.github/badges/coverage.json"
+
+          echo "Fetching main branch coverage from: $MAIN_BADGE_URL"
+
+          if curl -f -s "$MAIN_BADGE_URL" -o main-coverage.json; then
+            MAIN_COVERAGE=$(jq -r '.message' main-coverage.json | sed 's/%//')
+            echo "Main branch coverage: ${MAIN_COVERAGE}%"
+          else
+            echo "Could not fetch main branch coverage badge"
+          fi
+
+          echo "percentage=$MAIN_COVERAGE" >> $GITHUB_OUTPUT
+
+      - name: Calculate coverage difference
+        if: github.event_name == 'pull_request'
+        id: coverage-diff
+        run: |
+          CURRENT="${{ steps.merge-coverage.outputs.percentage }}"
+          MAIN="${{ steps.main-coverage.outputs.percentage }}"
+
+          if [ "$MAIN" = "N/A" ]; then
+            echo "diff=N/A" >> $GITHUB_OUTPUT
+            echo "emoji=ℹ️" >> $GITHUB_OUTPUT
+            echo "trend=baseline" >> $GITHUB_OUTPUT
+            echo "Cannot compare - main branch coverage not available"
+          else
+            # Use Python for floating point arithmetic (always available in GitHub Actions)
+            DIFF=$(python3 -c "print(round($CURRENT - $MAIN, 2))")
+            echo "diff=$DIFF" >> $GITHUB_OUTPUT
+
+            # Determine emoji and trend based on difference
+            # Use Python for comparison to avoid bc dependency
+            if [ "$(python3 -c "print(1 if $DIFF > 0 else 0)")" = "1" ]; then
+              echo "emoji=📈" >> $GITHUB_OUTPUT
+              echo "trend=improved" >> $GITHUB_OUTPUT
+              echo "Coverage improved by ${DIFF}%"
+            elif [ "$(python3 -c "print(1 if $DIFF < 0 else 0)")" = "1" ]; then
+              echo "emoji=📉" >> $GITHUB_OUTPUT
+              echo "trend=decreased" >> $GITHUB_OUTPUT
+              echo "Coverage decreased by ${DIFF}%"
+            else
+              echo "emoji=➡️" >> $GITHUB_OUTPUT
+              echo "trend=unchanged" >> $GITHUB_OUTPUT
+              echo "Coverage unchanged"
+            fi
+          fi
+
+      - name: Generate coverage summary for PR
+        if: github.event_name == 'pull_request'
+        id: coverage-summary
+        run: |
+          # Create a formatted summary
+          echo "COVERAGE_SUMMARY<<EOF" >> $GITHUB_ENV
+          cat coverage/summary.txt >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Comment PR with combined coverage
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: coverage
+          message: |
+            ## 📊 Combined Test Coverage Report
+
+            **Current Coverage:** `${{ steps.merge-coverage.outputs.percentage }}%`
+            **Main Branch Coverage:** `${{ steps.main-coverage.outputs.percentage }}%`
+            **Difference:** ${{ steps.coverage-diff.outputs.emoji }} `${{ steps.coverage-diff.outputs.diff }}%`
+
+            <details>
+            <summary>📁 Coverage by Package</summary>
+
+            ${{ env.COVERAGE_SUMMARY }}
+
+            </details>
+
+            <details>
+            <summary>📄 Full Coverage Report</summary>
+
+            ```
+            ${{ steps.merge-coverage.outputs.coverage_text }}
+            ```
+
+            </details>
+
+            > Coverage is calculated from unit tests + integration tests combined.
+
+  container-malware-scan:
+    name: Container Malware Scan
+    runs-on: self-hosted
+    needs: [malware-scan]  # Run after source scan passes
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Get current epoch time
+        id: time
+        run: echo "epoch=$(date +%s)" >> $GITHUB_OUTPUT
+
+      - name: Build container for scanning
+        uses: docker/build-push-action@v6
+        with:
+          file: Containerfile
+          context: .
+          build-args: |
+            BUILD_NUMBER=scan-${{ github.sha }}
+            GIT_COMMIT=${{ github.sha }}
+            BUILD_TIME=${{ steps.time.outputs.epoch }}
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: valkey-operator:scan-${{ github.sha }}
+
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: valkey-operator:scan-${{ github.sha }}
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+          scanners: 'vuln,secret,misconfig'
+
+      - name: Run Trivy scan (SARIF output)
+        if: always()
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: valkey-operator:scan-${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          scanners: 'vuln,secret,misconfig'
+
+      - name: Upload Trivy scan results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: trivy-container-report
+          path: trivy-results.sarif
+          retention-days: 30
+
+      - name: Cleanup scan image
+        if: always()
+        run: docker rmi valkey-operator:scan-${{ github.sha }} || true
+
+  semantic-release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [malware-scan, container-malware-scan, gosec, govulncheck, linter, cyclomatic-complexity, unit-tests, integration-tests, e2e-tests, coverage-report]
+    name: Semantic Release
+    runs-on: self-hosted
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.BOT_PAT }}
+
+      - name: Download coverage badge
+        uses: actions/download-artifact@v8
+        with:
+          name: coverage-badge
+          path: .github/badges/
+        continue-on-error: true
+
+      - name: Verify coverage badge downloaded
+        run: |
+          if [ -f ".github/badges/coverage.json" ]; then
+            echo "✅ Coverage badge downloaded successfully"
+            cat .github/badges/coverage.json
+          else
+            echo "⚠️ Coverage badge not found, using existing file"
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "lts/*"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Verify the integrity of provenance attestations and registry signatures for installed dependencies
+        run: npm audit signatures
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.BOT_PAT }}
+        run: npx semantic-release
