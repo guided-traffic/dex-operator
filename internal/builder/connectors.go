@@ -207,6 +207,7 @@ func buildLDAPGroupSearch(s dexv1.LDAPGroupSearch) map[string]any {
 
 // ── SAML ─────────────────────────────────────────────────────────────────────
 
+//nolint:unparam // error return kept for API consistency; this connector never errors
 func buildSAMLConnector(c *dexv1.DexSAMLConnector) (ConnectorEntry, []MountedSecret, error) {
 	id := connectorID(c.Name, c.Spec.ID)
 	cfg := map[string]any{"ssoURL": c.Spec.SSOURL}

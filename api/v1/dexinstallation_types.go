@@ -79,6 +79,7 @@ type DexInstallationSpec struct {
 // +kubebuilder:validation:Enum=kubernetes;memory;postgres;sqlite3;etcd;mysql
 type StorageType string
 
+// Storage backend constants.
 const (
 	StorageKubernetes StorageType = "kubernetes"
 	StorageMemory     StorageType = "memory"

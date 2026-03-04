@@ -20,8 +20,9 @@ import (
 	"context"
 	"fmt"
 
-	dexv1 "github.com/guided-traffic/dex-operator/api/v1"
 	"gopkg.in/yaml.v3"
+
+	dexv1 "github.com/guided-traffic/dex-operator/api/v1"
 )
 
 // SecretResolver resolves a [dexv1.SecretKeyRef] to its plaintext string value.

@@ -1,0 +1,27 @@
+# Helm values for deploying the dex-operator in the E2E Kind cluster.
+# Used by the Makefile e2e-local target:
+#   helm install dex-operator deploy/helm/dex-operator \
+#     --namespace dex-operator-system --create-namespace \
+#     --values test/e2e/helm-values.yaml --wait --timeout 120s
+
+# Use the locally-built test image (loaded into Kind by `make kind-load`).
+image:
+  repository: dex-operator
+  tag: test
+  pullPolicy: Never
+
+# Disable leader election for single-node Kind clusters.
+leaderElection:
+  enabled: false
+
+# Reduce resource requests for Kind environment.
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# Watch all namespaces.
+watchNamespaces: []

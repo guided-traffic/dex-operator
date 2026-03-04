@@ -60,6 +60,8 @@ func (r *DexInstallationReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 }
 
 // reconcileInstallation contains the core reconciliation logic.
+//
+//nolint:unparam // ctrl.Result is always zero today; kept for future requeue support
 func (r *DexInstallationReconciler) reconcileInstallation(
 	ctx context.Context,
 	installation *dexv1.DexInstallation,

@@ -90,7 +90,7 @@ func buildSocialConnectors(
 	for i := range cs.Google {
 		e, m, err := buildGoogleConnector(ctx, &cs.Google[i], sr, envs)
 		if err != nil {
-			return nil, nil, fmt.Errorf("Google connector %q: %w", cs.Google[i].Name, err)
+			return nil, nil, fmt.Errorf("google connector %q: %w", cs.Google[i].Name, err)
 		}
 		entries = append(entries, e)
 		mounts = append(mounts, m...)
@@ -108,7 +108,7 @@ func buildSocialConnectors(
 	for i := range cs.Microsoft {
 		e, m, err := buildMicrosoftConnector(ctx, &cs.Microsoft[i], sr, envs)
 		if err != nil {
-			return nil, nil, fmt.Errorf("Microsoft connector %q: %w", cs.Microsoft[i].Name, err)
+			return nil, nil, fmt.Errorf("microsoft connector %q: %w", cs.Microsoft[i].Name, err)
 		}
 		entries = append(entries, e)
 		mounts = append(mounts, m...)
@@ -167,7 +167,7 @@ func buildIdentityConnectors(
 	for i := range cs.Keystone {
 		e, m, err := buildKeystoneConnector(ctx, &cs.Keystone[i], sr, envs)
 		if err != nil {
-			return nil, nil, fmt.Errorf("Keystone connector %q: %w", cs.Keystone[i].Name, err)
+			return nil, nil, fmt.Errorf("keystone connector %q: %w", cs.Keystone[i].Name, err)
 		}
 		entries = append(entries, e)
 		mounts = append(mounts, m...)
@@ -189,7 +189,7 @@ func buildHostingConnectors(
 	for i := range cs.Gitea {
 		e, m, err := buildGiteaConnector(ctx, &cs.Gitea[i], sr, envs)
 		if err != nil {
-			return nil, nil, fmt.Errorf("Gitea connector %q: %w", cs.Gitea[i].Name, err)
+			return nil, nil, fmt.Errorf("gitea connector %q: %w", cs.Gitea[i].Name, err)
 		}
 		entries = append(entries, e)
 		mounts = append(mounts, m...)
@@ -198,7 +198,7 @@ func buildHostingConnectors(
 	for i := range cs.Bitbucket {
 		e, m, err := buildBitbucketConnector(ctx, &cs.Bitbucket[i], sr, envs)
 		if err != nil {
-			return nil, nil, fmt.Errorf("Bitbucket connector %q: %w", cs.Bitbucket[i].Name, err)
+			return nil, nil, fmt.Errorf("bitbucket connector %q: %w", cs.Bitbucket[i].Name, err)
 		}
 		entries = append(entries, e)
 		mounts = append(mounts, m...)
@@ -292,6 +292,7 @@ func buildGitHubOrgs(orgs []dexv1.GitHubOrg) []map[string]any {
 
 // ── GitLab ────────────────────────────────────────────────────────────────────
 
+//nolint:unparam // []MountedSecret return kept for API consistency with connectors that do mount files
 func buildGitLabConnector(
 	ctx context.Context,
 	c *dexv1.DexGitLabConnector,
@@ -371,6 +372,7 @@ func buildGoogleConnector(
 
 // ── LinkedIn ──────────────────────────────────────────────────────────────────
 
+//nolint:unparam // []MountedSecret return kept for API consistency with connectors that do mount files
 func buildLinkedInConnector(
 	ctx context.Context,
 	c *dexv1.DexLinkedInConnector,
@@ -396,6 +398,7 @@ func buildLinkedInConnector(
 
 // ── Microsoft ─────────────────────────────────────────────────────────────────
 
+//nolint:unparam // []MountedSecret return kept for API consistency with connectors that do mount files
 func buildMicrosoftConnector(
 	ctx context.Context,
 	c *dexv1.DexMicrosoftConnector,
@@ -627,6 +630,7 @@ func buildOpenShiftConnector(
 
 // ── AtlassianCrowd ────────────────────────────────────────────────────────────
 
+//nolint:unparam // []MountedSecret return kept for API consistency with connectors that do mount files
 func buildAtlassianCrowdConnector(
 	ctx context.Context,
 	c *dexv1.DexAtlassianCrowdConnector,
@@ -709,6 +713,7 @@ func buildGiteaConnector(
 
 // ── Bitbucket ─────────────────────────────────────────────────────────────────
 
+//nolint:unparam // []MountedSecret return kept for API consistency with connectors that do mount files
 func buildBitbucketConnector(
 	ctx context.Context,
 	c *dexv1.DexBitbucketConnector,
@@ -738,6 +743,7 @@ func buildBitbucketConnector(
 
 // ── Keystone ──────────────────────────────────────────────────────────────────
 
+//nolint:unparam // []MountedSecret return kept for API consistency with connectors that do mount files
 func buildKeystoneConnector(
 	ctx context.Context,
 	c *dexv1.DexKeystoneConnector,

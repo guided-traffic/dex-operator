@@ -127,7 +127,7 @@ func buildPostgresSSL(s *dexv1.DexPostgresSSLSpec, namespace string) (map[string
 	}
 
 	if s.CARef != nil {
-		path := fmt.Sprintf("/etc/dex/certs/postgres-ca.pem")
+		path := "/etc/dex/certs/postgres-ca.pem"
 		mounts = append(mounts, MountedSecret{
 			Namespace:  namespace,
 			SecretName: s.CARef.Name,

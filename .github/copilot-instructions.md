@@ -118,8 +118,9 @@ File-path-only certs (SAML `ca`, client TLS, service accounts) are added to `Mou
 - [x] Unit-Tests für Controller
 
 ### Phase 5: Integration & E2E Tests
-- [ ] Integration-Tests mit envtest
-- [ ] E2E-Tests mit Kind-Cluster + Dex Helm Chart
+- [x] Integration-Tests mit envtest (`test/integration/` — 14 Tests: Installation, Connector, StaticClient)
+- [x] E2E-Tests mit Kind-Cluster (`test/e2e/` — 5 Tests: Lifecycle, Namespace-Isolation, StaticClient)
+- [x] E2E-Testdata (`test/e2e/testdata/cert-manager-issuer.yaml`, `test/e2e/helm-values.yaml`)
 - [ ] CI-Pipeline testen (build, lint, test, release)
 
 ### Phase 6: Dokumentation & Helm
