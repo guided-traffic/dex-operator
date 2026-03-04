@@ -124,7 +124,6 @@ File-path-only certs (SAML `ca`, client TLS, service accounts) are added to `Mou
 - [ ] CI-Pipeline testen (build, lint, test, release)
 
 ### Phase 6: Dokumentation & Helm
-- [ ] Operator Helm Chart (deploy/helm/dex-operator)
-- [ ] CRD-Sync in Helm Chart
-- [ ] Beispiel-Manifeste (examples/)
+- [x] Operator Helm Chart (deploy/helm/dex-operator)
+- [x] CRD-Sync in Helm Chart (`make helm-sync-crds`, called automatically by `make manifests`)
 - [ ] README mit Architektur, Quickstart, Beispielen

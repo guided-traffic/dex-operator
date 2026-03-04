@@ -322,6 +322,15 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=dex-operator-role crd paths="./..." output:crd:artifacts:config=config/crd/bases output:rbac:artifacts:config=config/rbac
+	$(MAKE) helm-sync-crds
+
+HELM_CRD_DIR = deploy/helm/dex-operator/files/crds
+
+.PHONY: helm-sync-crds
+helm-sync-crds: ## Sync CRD manifests from config/crd/bases into the Helm chart's files/crds/ directory.
+	@mkdir -p $(HELM_CRD_DIR)
+	@cp config/crd/bases/*.yaml $(HELM_CRD_DIR)/
+	@echo "Synced CRDs → $(HELM_CRD_DIR)"
 
 .PHONY: envtest
 envtest: $(ENVTEST) ## Download setup-envtest locally if necessary.
