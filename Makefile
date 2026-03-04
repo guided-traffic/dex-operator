@@ -1,5 +1,5 @@
 # Image URL to use for building/pushing image targets
-IMG ?= guidedtraffic/valkey-operator:latest
+IMG ?= guidedtraffic/dex-operator:latest
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.29.0
@@ -106,18 +106,18 @@ test-e2e-helm: build ## Run Helm migration E2E test (requires running Kind clust
 .PHONY: kind-create
 kind-create: ## Create a Kind cluster for local testing.
 	@echo "Creating Kind cluster..."
-	@echo 'kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nname: valkey-operator-test\nnodes:\n- role: control-plane' | sed 's/\\n/\n/g' > /tmp/kind-config.yaml
+	@echo 'kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nname: dex-operator-test\nnodes:\n- role: control-plane' | sed 's/\\n/\n/g' > /tmp/kind-config.yaml
 	kind create cluster --config /tmp/kind-config.yaml --wait 120s
 
 .PHONY: kind-delete
 kind-delete: ## Delete the Kind test cluster.
 	@echo "Deleting Kind cluster..."
-	-kind delete cluster --name valkey-operator-test
+	-kind delete cluster --name dex-operator-test
 
 .PHONY: kind-load
 kind-load: docker-build ## Build and load the operator image into Kind.
 	@echo "Loading image into Kind cluster..."
-	kind load docker-image ${IMG} --name valkey-operator-test
+	kind load docker-image ${IMG} --name dex-operator-test
 
 .PHONY: cert-manager-install
 cert-manager-install: ## Install cert-manager into the cluster.
@@ -131,17 +131,17 @@ cert-manager-install: ## Install cert-manager into the cluster.
 	@sleep 5
 	@kubectl apply -f test/e2e/testdata/cert-manager-issuer.yaml
 
-E2E_IMG ?= valkey-operator:test
+E2E_IMG ?= dex-operator:test
 
 .PHONY: e2e-local
 e2e-local: kind-create cert-manager-install ## Run full E2E test locally with Kind.
 	@echo "Building E2E image..."
 	docker build -f Containerfile -t $(E2E_IMG) .
 	@echo "Loading E2E image into Kind cluster..."
-	kind load docker-image $(E2E_IMG) --name valkey-operator-test
+	kind load docker-image $(E2E_IMG) --name dex-operator-test
 	@echo "Installing operator via Helm..."
-	helm install valkey-operator deploy/helm/valkey-operator \
-		--namespace valkey-operator-system \
+	helm install dex-operator deploy/helm/dex-operator \
+		--namespace dex-operator-system \
 		--create-namespace \
 		--values test/e2e/helm-values.yaml \
 		--wait \
@@ -216,7 +216,7 @@ vuln: ## Check for vulnerabilities.
 
 ##@ Code Generation
 
-HELM_CHART_DIR = deploy/helm/valkey-operator
+HELM_CHART_DIR = deploy/helm/dex-operator
 CRD_HELM_TARGET = $(HELM_CHART_DIR)/templates/crd.yaml
 
 .PHONY: sync-helm-crd
@@ -321,7 +321,7 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) rbac:roleName=valkey-operator-role crd paths="./..." output:crd:artifacts:config=config/crd/bases output:rbac:artifacts:config=config/rbac
+	$(CONTROLLER_GEN) rbac:roleName=dex-operator-role crd paths="./..." output:crd:artifacts:config=config/crd/bases output:rbac:artifacts:config=config/rbac
 
 .PHONY: envtest
 envtest: $(ENVTEST) ## Download setup-envtest locally if necessary.
