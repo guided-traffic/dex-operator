@@ -32,6 +32,29 @@ Jede referenziert eine DexInstallation per Name+Namespace und enthält die typ-s
 ## Repository & Registry
 `guidedtraffic/dex-operator`
 
+## Builder Package (`internal/builder`)
+
+The `Build(ctx, Input) (Output, error)` function is the single entry point.
+
+**Input** carries:
+- `*DexInstallation` (issuer, storage, web, gRPC, logger, expiry, oauth2)
+- `ConnectorSet` — all 16 connector types grouped by CRD kind
+- `[]DexStaticClient`
+- `SecretResolver` — caller-provided func to resolve `SecretKeyRef` → value
+
+**Output** carries:
+- `ConfigYAML []byte` — ready-to-store Dex `config.yaml`
+- `EnvSecretData map[string][]byte` — env vars for the Dex env Secret (`$VAR` refs in config)
+- `MountedSecrets []MountedSecret` — Secret keys that the controller must mount as files (TLS certs, service-account JSON, etc.)
+
+Env-var naming convention:
+- Connector credential: `<TYPE>_<ID>_<FIELD>` (e.g. `OIDC_OKTA_CLIENT_SECRET`)
+- Static client secret: `<RESOURCE_NAME>_CLIENT_SECRET` (e.g. `GRAFANA_CLIENT_SECRET`)
+- Storage credential: `STORAGE_<FIELD>` (e.g. `STORAGE_POSTGRES_PASSWORD`)
+
+CA cert data (LDAP `rootCAData`) is base64-encoded and inlined in config.
+File-path-only certs (SAML `ca`, client TLS, service accounts) are added to `MountedSecrets`; the controller picks these up in Phase 4.
+
 ---
 
 # Important Notes
@@ -80,10 +103,10 @@ Jede referenziert eine DexInstallation per Name+Namespace und enthält die typ-s
 - [x] CRD-Manifeste generieren (`make manifests`)
 
 ### Phase 3: Config Builder
-- [ ] Dex Config YAML Struct (interne Repräsentation, nicht CRD)
-- [ ] Config-Builder: DexInstallation + Connectors + Clients → Dex YAML
-- [ ] Env-Secret-Builder: Client-Secrets aus referenzierten Secrets sammeln → Env-Secret Map
-- [ ] Unit-Tests für Config-Builder
+- [x] Dex Config YAML Struct (interne Repräsentation, nicht CRD) → `internal/builder/config_types.go`
+- [x] Config-Builder: DexInstallation + Connectors + Clients → Dex YAML → `internal/builder/builder.go`, `connectors.go`, `connectors_oauth.go`, `clients.go`, `storage.go`
+- [x] Env-Secret-Builder: Client-Secrets aus referenzierten Secrets sammeln → Env-Secret Map (in `Build` via `SecretResolver`)
+- [x] Unit-Tests für Config-Builder → `internal/builder/builder_test.go`
 
 ### Phase 4: Controller
 - [ ] DexInstallation Controller (Reconciler): Config + Env Secret schreiben
