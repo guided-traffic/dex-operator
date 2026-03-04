@@ -93,6 +93,14 @@ jobs:
           # Don't specify --snapshotter flag to avoid platform unpacking issues
           docker save dex-operator:test | docker exec -i dex-operator-test-control-plane ctr --namespace=k8s.io images import -
 
+      - name: Load kubectl image into Kind cluster
+        run: |
+          # Pre-load the image used by the crd-upgrade pre-install hook Job so
+          # that Kubernetes does not need to pull it from the internet inside the
+          # DinD node (which would time out and fail the helm pre-install hook).
+          docker pull guidedtraffic/kubectl:1.29
+          docker save guidedtraffic/kubectl:1.29 | docker exec -i dex-operator-test-control-plane ctr --namespace=k8s.io images import -
+
       - name: Verify image in cluster
         run: |
           echo "=== Verifying image is available in Kind cluster ==="

@@ -25,3 +25,9 @@ resources:
 
 # Watch all namespaces.
 watchNamespaces: []
+
+# CRD upgrade job: use the pre-loaded image (Never pull) to avoid Docker Hub
+# rate-limiting / network issues inside the Kind DinD CI environment.
+crdUpgradeJob:
+  image:
+    pullPolicy: Never

@@ -61,7 +61,7 @@ healthProbeBindAddress: ":8081"
 # A pre-upgrade hook Job is created that applies all CRDs using kubectl.
 crdUpgradeJob:
   image:
-    repository: bitnami/kubectl
+    repository: guidedtraffic/kubectl
     tag: "1.29"
     pullPolicy: IfNotPresent
   resources:
