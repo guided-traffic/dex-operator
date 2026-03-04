@@ -36,7 +36,7 @@ func buildAllConnectors(
 	sr SecretResolver,
 	envs map[string][]byte,
 ) ([]ConnectorEntry, []MountedSecret, error) {
-	var entries []ConnectorEntry
+	entries := make([]ConnectorEntry, 0, len(cs.LDAP)+len(cs.SAML)+len(cs.AuthProxy))
 	var mounts []MountedSecret
 
 	for i := range cs.LDAP {

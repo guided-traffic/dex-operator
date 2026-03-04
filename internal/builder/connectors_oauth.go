@@ -66,7 +66,7 @@ func buildSocialConnectors(
 	sr SecretResolver,
 	envs map[string][]byte,
 ) ([]ConnectorEntry, []MountedSecret, error) {
-	var entries []ConnectorEntry
+	entries := make([]ConnectorEntry, 0, len(cs.GitHub)+len(cs.GitLab)+len(cs.Google)+len(cs.LinkedIn)+len(cs.Microsoft))
 	var mounts []MountedSecret
 
 	for i := range cs.GitHub {
@@ -125,7 +125,7 @@ func buildIdentityConnectors(
 	sr SecretResolver,
 	envs map[string][]byte,
 ) ([]ConnectorEntry, []MountedSecret, error) {
-	var entries []ConnectorEntry
+	entries := make([]ConnectorEntry, 0, len(cs.OIDC)+len(cs.OAuth2)+len(cs.OpenShift)+len(cs.AtlassianCrowd)+len(cs.Keystone))
 	var mounts []MountedSecret
 
 	for i := range cs.OIDC {
@@ -183,7 +183,7 @@ func buildHostingConnectors(
 	sr SecretResolver,
 	envs map[string][]byte,
 ) ([]ConnectorEntry, []MountedSecret, error) {
-	var entries []ConnectorEntry
+	entries := make([]ConnectorEntry, 0, len(cs.Gitea)+len(cs.Bitbucket))
 	var mounts []MountedSecret
 
 	for i := range cs.Gitea {
