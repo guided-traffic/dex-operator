@@ -58,26 +58,26 @@ Jede referenziert eine DexInstallation per Name+Namespace und enthält die typ-s
 - [x] README.md aktualisieren
 
 ### Phase 2: CRD-Typen definieren (api/v1/)
-- [ ] DexInstallation types + deepcopy
-- [ ] DexStaticClient types + deepcopy
-- [ ] DexLDAPConnector types
-- [ ] DexGitHubConnector types
-- [ ] DexSAMLConnector types
-- [ ] DexGitLabConnector types
-- [ ] DexOIDCConnector types
-- [ ] DexOAuth2Connector types
-- [ ] DexGoogleConnector types
-- [ ] DexLinkedInConnector types
-- [ ] DexMicrosoftConnector types
-- [ ] DexAuthProxyConnector types
-- [ ] DexBitbucketConnector types
-- [ ] DexLocalConnector types (BuiltIn)
-- [ ] DexOpenShiftConnector types
-- [ ] DexAtlassianCrowdConnector types
-- [ ] DexGiteaConnector types
-- [ ] DexKeystoneConnector types
-- [ ] Gemeinsame Typen: InstallationRef, SecretKeyRef, Status-Conditions
-- [ ] CRD-Manifeste generieren (`make manifests`)
+- [x] DexInstallation types + deepcopy
+- [x] DexStaticClient types + deepcopy
+- [x] DexLDAPConnector types
+- [x] DexGitHubConnector types
+- [x] DexSAMLConnector types
+- [x] DexGitLabConnector types
+- [x] DexOIDCConnector types
+- [x] DexOAuth2Connector types
+- [x] DexGoogleConnector types
+- [x] DexLinkedInConnector types
+- [x] DexMicrosoftConnector types
+- [x] DexAuthProxyConnector types
+- [x] DexBitbucketConnector types
+- [x] DexLocalConnector types (BuiltIn)
+- [x] DexOpenShiftConnector types
+- [x] DexAtlassianCrowdConnector types
+- [x] DexGiteaConnector types
+- [x] DexKeystoneConnector types
+- [x] Gemeinsame Typen: InstallationRef, SecretKeyRef, Status-Conditions
+- [x] CRD-Manifeste generieren (`make manifests`)
 
 ### Phase 3: Config Builder
 - [ ] Dex Config YAML Struct (interne Repräsentation, nicht CRD)
