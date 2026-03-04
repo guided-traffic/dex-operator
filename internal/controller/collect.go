@@ -39,7 +39,7 @@ func installationRefIndexValue(namespace, name string) string {
 // InstallationRefIndexFunc is the IndexerFunc for all child resource types.
 // Register it with mgr.GetFieldIndexer().IndexField for every child GVK.
 func InstallationRefIndexFunc(obj client.Object) []string {
-	child, ok := obj.(dexv1.ChildObject)
+	child, ok := obj.(ChildObject)
 	if !ok {
 		return nil
 	}

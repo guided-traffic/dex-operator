@@ -158,7 +158,7 @@ func countConnectors(cs builder.ConnectorSet) int {
 // mapChildToInstallation is a handler.MapFunc that maps any child object that
 // implements [dexv1.ChildObject] to its referenced DexInstallation.
 func mapChildToInstallation(_ context.Context, obj client.Object) []ctrl.Request {
-	child, ok := obj.(dexv1.ChildObject)
+	child, ok := obj.(ChildObject)
 	if !ok {
 		return nil
 	}

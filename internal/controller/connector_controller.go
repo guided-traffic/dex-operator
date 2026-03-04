@@ -30,7 +30,7 @@ import (
 func newChildReconciler[T interface {
 	*U
 	client.Object
-	dexv1.ChildObject
+	ChildObject
 }, U any](c client.Client, scheme *runtime.Scheme) *GenericChildReconciler[T, U] {
 	return &GenericChildReconciler[T, U]{Client: c, Scheme: scheme}
 }

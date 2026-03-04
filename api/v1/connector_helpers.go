@@ -16,17 +16,6 @@ limitations under the License.
 
 package v1
 
-// ChildObject is implemented by all child resources of a DexInstallation
-// (connectors and static clients). It allows controllers to use shared
-// reconciliation logic regardless of the concrete type.
-type ChildObject interface {
-	// GetInstallationRef returns the reference to the owning DexInstallation.
-	GetInstallationRef() InstallationRef
-	// GetCommonStatus returns a pointer to the shared status block so
-	// controllers can read / write conditions and observedGeneration.
-	GetCommonStatus() *CommonStatus
-}
-
 // ─── DexLDAPConnector ─────────────────────────────────────────────────────────
 
 // GetInstallationRef implements ChildObject.

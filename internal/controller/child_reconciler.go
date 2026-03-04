@@ -40,7 +40,7 @@ import (
 type GenericChildReconciler[T interface {
 	*U
 	client.Object
-	dexv1.ChildObject
+	ChildObject
 }, U any] struct {
 	client.Client
 	Scheme *runtime.Scheme
