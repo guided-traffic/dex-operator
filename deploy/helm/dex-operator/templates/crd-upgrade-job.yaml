@@ -35,6 +35,7 @@ spec:
       restartPolicy: OnFailure
       securityContext:
         runAsNonRoot: true
+        runAsUser: 65534
         seccompProfile:
           type: RuntimeDefault
       {{- with .Values.imagePullSecrets }}

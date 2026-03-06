@@ -133,19 +133,24 @@ cert-manager-install: ## Install cert-manager into the cluster.
 
 E2E_IMG ?= dex-operator:test
 
+KUBECTL_IMG ?= guidedtraffic/kubectl:1.33
+
 .PHONY: e2e-local
 e2e-local: kind-create cert-manager-install ## Run full E2E test locally with Kind.
 	@echo "Building E2E image..."
 	docker build -f Containerfile -t $(E2E_IMG) .
-	@echo "Loading E2E image into Kind cluster..."
+	@echo "Pulling kubectl image for CRD upgrade hook..."
+	docker pull $(KUBECTL_IMG)
+	@echo "Loading images into Kind cluster..."
 	kind load docker-image $(E2E_IMG) --name dex-operator-test
-	@echo "Installing operator via Helm..."
+	kind load docker-image $(KUBECTL_IMG) --name dex-operator-test
+	@echo "Installing operator via Helm (pre-install hook deploys CRDs)..."
 	helm install dex-operator deploy/helm/dex-operator \
 		--namespace dex-operator-system \
 		--create-namespace \
 		--values test/e2e/helm-values.yaml \
 		--wait \
-		--timeout 120s
+		--timeout 300s
 	@echo "Running E2E tests..."
 	$(MAKE) test-e2e
 	@echo "Cleaning up..."
