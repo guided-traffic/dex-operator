@@ -1,6 +1,7 @@
 module github.com/guided-traffic/dex-operator
 
 go 1.25.5
+toolchain go1.26.1
 
 require (
 	k8s.io/apimachinery v0.35.0
