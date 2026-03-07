@@ -134,6 +134,25 @@ spec:
                       signing keys.
                     type: string
                 type: object
+              frontend:
+                description: Frontend configures the Dex web frontend appearance.
+                properties:
+                  dir:
+                    description: Dir is the path to the web assets directory.
+                    type: string
+                  issuer:
+                    description: Issuer overrides the issuer string displayed in the
+                      Dex UI.
+                    type: string
+                  logoURL:
+                    description: LogoURL is the URL of a logo to display in the Dex
+                      UI.
+                    type: string
+                  theme:
+                    description: Theme selects the Dex UI theme (e.g. "dark", "light",
+                      "coreos", "tectonic").
+                    type: string
+                type: object
               grpc:
                 description: GRPC configures the optional gRPC API server.
                 properties:

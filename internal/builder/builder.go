@@ -175,6 +175,15 @@ func assembleDexConfig(
 		cfg.OAuth2 = assembleOAuth2Config(spec.OAuth2)
 	}
 
+	if spec.Frontend != nil {
+		cfg.Frontend = &FrontendConfig{
+			Dir:     spec.Frontend.Dir,
+			Theme:   spec.Frontend.Theme,
+			Issuer:  spec.Frontend.Issuer,
+			LogoURL: spec.Frontend.LogoURL,
+		}
+	}
+
 	return cfg
 }
 

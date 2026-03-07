@@ -27,6 +27,7 @@ type DexConfig struct {
 	Logger           *LoggerConfig    `yaml:"logger,omitempty"`
 	Expiry           *ExpiryConfig    `yaml:"expiry,omitempty"`
 	OAuth2           *OAuth2Config    `yaml:"oauth2,omitempty"`
+	Frontend         *FrontendConfig  `yaml:"frontend,omitempty"`
 	Connectors       []ConnectorEntry `yaml:"connectors,omitempty"`
 	StaticClients    []StaticClient   `yaml:"staticClients,omitempty"`
 	EnablePasswordDB bool             `yaml:"enablePasswordDB,omitempty"`
@@ -83,6 +84,14 @@ type RefreshTokensConfig struct {
 	ReuseInterval     string `yaml:"reuseInterval,omitempty"`
 	ValidIfNotUsedFor string `yaml:"validIfNotUsedFor,omitempty"`
 	AbsoluteLifetime  string `yaml:"absoluteLifetime,omitempty"`
+}
+
+// FrontendConfig configures the Dex web frontend appearance.
+type FrontendConfig struct {
+	Dir     string `yaml:"dir,omitempty"`
+	Theme   string `yaml:"theme,omitempty"`
+	Issuer  string `yaml:"issuer,omitempty"`
+	LogoURL string `yaml:"logoURL,omitempty"`
 }
 
 // OAuth2Config configures Dex's OAuth2 behaviour.
