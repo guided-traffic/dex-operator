@@ -2,8 +2,30 @@ apiVersion: v1
 entries:
   dex-operator:
   - apiVersion: v2
+    appVersion: 1.0.4
+    created: "2026-03-07T17:28:15.413134845Z"
+    description: A Kubernetes Operator that dynamically assembles Dex configuration
+      from Custom Resources
+    digest: c971654b21629b2f2609ef86438d4d0f8b72847131b2b64b8b37e51d3679c7f3
+    home: https://github.com/guided-traffic/dex-operator
+    keywords:
+    - dex
+    - operator
+    - oidc
+    - sso
+    kubeVersion: '>=1.25.0-0'
+    maintainers:
+    - name: guidedtraffic
+    name: dex-operator
+    sources:
+    - https://github.com/guided-traffic/dex-operator
+    type: application
+    urls:
+    - https://guided-traffic.github.io/dex-operator/dex-operator-1.0.4.tgz
+    version: 1.0.4
+  - apiVersion: v2
     appVersion: 1.0.3
-    created: "2026-03-07T16:50:05.898029764Z"
+    created: "2026-03-07T17:28:15.41241299Z"
     description: A Kubernetes Operator that dynamically assembles Dex configuration
       from Custom Resources
     digest: df2287f0a2709e3ff1ab7733091b74052f855d06731c2c7e56ad6b3b68f6dc13
@@ -25,7 +47,7 @@ entries:
     version: 1.0.3
   - apiVersion: v2
     appVersion: 1.0.2
-    created: "2026-03-07T16:50:05.896764679Z"
+    created: "2026-03-07T17:28:15.41162497Z"
     description: A Kubernetes Operator that dynamically assembles Dex configuration
       from Custom Resources
     digest: 6dd2e877a38e180e84b70e328f45b940a77fcc3b169a25eafbab633bce9e7b60
@@ -47,7 +69,7 @@ entries:
     version: 1.0.2
   - apiVersion: v2
     appVersion: 1.0.1
-    created: "2026-03-07T16:50:05.895130991Z"
+    created: "2026-03-07T17:28:15.410512876Z"
     description: A Kubernetes Operator that dynamically assembles Dex configuration
       from Custom Resources
     digest: 73e1a3fc01739c309bd2de41aaf5a47f0a5f72021175cf33bdf16240fc9ce594
@@ -69,7 +91,7 @@ entries:
     version: 1.0.1
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-03-07T16:50:05.892215646Z"
+    created: "2026-03-07T17:28:15.409092901Z"
     description: A Kubernetes Operator that dynamically assembles Dex configuration
       from Custom Resources
     digest: 68cdce61b7ae90dd5c9c6c4b2ae8d4d6ec96d9bf263d3cf8b7111c2abf231ec6
@@ -89,4 +111,4 @@ entries:
     urls:
     - https://guided-traffic.github.io/dex-operator/dex-operator-1.0.0.tgz
     version: 1.0.0
-generated: "2026-03-07T16:50:05.890067007Z"
+generated: "2026-03-07T17:28:15.407794976Z"
