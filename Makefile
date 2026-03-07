@@ -222,19 +222,6 @@ vuln: ## Check for vulnerabilities.
 ##@ Code Generation
 
 HELM_CHART_DIR = deploy/helm/dex-operator
-CRD_HELM_TARGET = $(HELM_CHART_DIR)/templates/crd.yaml
-
-.PHONY: sync-helm-crd
-sync-helm-crd: ## Sync generated CRDs into Helm chart (single source of truth: config/crd/bases/).
-	@echo "Syncing CRDs to Helm chart..."
-	@echo "# Generated - do not edit manually. Use 'make sync-helm-crd'." > $(CRD_HELM_TARGET)
-	@for crd in config/crd/bases/*.yaml; do \
-		if [ -f "$$crd" ]; then \
-			echo "---" >> $(CRD_HELM_TARGET); \
-			cat "$$crd" >> $(CRD_HELM_TARGET); \
-		fi; \
-	done
-	@echo "CRDs synced to $(CRD_HELM_TARGET)"
 
 ##@ Build
 
@@ -247,7 +234,7 @@ run: fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go --zap-log-level=debug
 
 .PHONY: generate-all
-generate-all: manifests generate sync-helm-crd ## Regenerate CRD, DeepCopy code, and sync Helm chart. Run this after any api/v1/ type change.
+generate-all: manifests generate ## Regenerate CRD, DeepCopy code, and sync Helm chart. Run this after any api/v1/ type change.
 
 .PHONY: docker-build
 docker-build: generate-all ## Build docker image with the manager (regenerates CRD and DeepCopy first).
