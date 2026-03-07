@@ -100,6 +100,10 @@ spec:
                 - key
                 - name
                 type: object
+              displayName:
+                description: DisplayName is the human-readable connector name shown
+                  on the Dex login page.
+                type: string
               groupSearch:
                 description: GroupSearch configures optional group membership lookup.
                 properties:
@@ -166,10 +170,6 @@ spec:
                 - name
                 - namespace
                 type: object
-              name:
-                description: Name is the human-readable connector name shown on the
-                  Dex login page.
-                type: string
               rootCARef:
                 description: RootCARef references the Secret key holding the PEM-encoded
                   root CA.
@@ -240,9 +240,9 @@ spec:
                   the login form.
                 type: string
             required:
+            - displayName
             - host
             - installationRef
-            - name
             - userSearch
             type: object
           status:

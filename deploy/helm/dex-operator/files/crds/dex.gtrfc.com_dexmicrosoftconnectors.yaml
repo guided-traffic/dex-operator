@@ -86,6 +86,10 @@ spec:
                 - key
                 - name
                 type: object
+              displayName:
+                description: DisplayName is the human-readable connector name shown
+                  on the Dex login page.
+                type: string
               domainHint:
                 description: |-
                   DomainHint is appended as the domain_hint query parameter to the auth
@@ -124,10 +128,6 @@ spec:
                 - name
                 - namespace
                 type: object
-              name:
-                description: Name is the human-readable connector name shown on the
-                  Dex login page.
-                type: string
               onlySecurityGroups:
                 description: OnlySecurityGroups limits group claims to security groups
                   only.
@@ -145,8 +145,8 @@ spec:
             required:
             - clientIDRef
             - clientSecretRef
+            - displayName
             - installationRef
-            - name
             type: object
           status:
             description: |-

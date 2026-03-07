@@ -29,9 +29,9 @@ type DexAtlassianCrowdConnectorSpec struct {
 	// +optional
 	ID string `json:"id,omitempty"`
 
-	// Name is the human-readable connector name shown on the Dex login page.
+	// DisplayName is the human-readable connector name shown on the Dex login page.
 	// +kubebuilder:validation:Required
-	Name string `json:"name"`
+	DisplayName string `json:"displayName"`
 
 	// BaseURL is the base URL of the Crowd server
 	// (e.g. https://crowd.example.com/crowd).

@@ -76,6 +76,10 @@ spec:
                 description: AdminUsername is the Keystone admin username for directory
                   lookups.
                 type: string
+              displayName:
+                description: DisplayName is the human-readable connector name shown
+                  on the Dex login page.
+                type: string
               domain:
                 description: Domain restricts authentication to a specific Keystone
                   domain name.
@@ -116,14 +120,10 @@ spec:
                   (e.g. https://keystone.example.com:5000).
                 format: uri
                 type: string
-              name:
-                description: Name is the human-readable connector name shown on the
-                  Dex login page.
-                type: string
             required:
+            - displayName
             - installationRef
             - keystoneHost
-            - name
             type: object
           status:
             description: |-

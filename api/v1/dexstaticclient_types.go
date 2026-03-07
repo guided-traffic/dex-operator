@@ -29,9 +29,10 @@ type DexStaticClientSpec struct {
 	// +kubebuilder:validation:Required
 	SecretRef StaticClientSecretRef `json:"secretRef"`
 
-	// Name is the human-readable display name of the client.
-	// +optional
-	Name string `json:"name,omitempty"`
+	// DisplayName is the human-readable display name of the client shown on the
+	// Dex approval screen.
+	// +kubebuilder:validation:Required
+	DisplayName string `json:"displayName"`
 
 	// RedirectURIs is the list of allowed redirect URIs.
 	// +kubebuilder:validation:Required
@@ -80,7 +81,7 @@ type DexStaticClientStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Namespaced,shortName=dexsc
 // +kubebuilder:printcolumn:name="Installation",type=string,JSONPath=`.spec.installationRef.name`
-// +kubebuilder:printcolumn:name="Display Name",type=string,JSONPath=`.spec.name`
+// +kubebuilder:printcolumn:name="Display Name",type=string,JSONPath=`.spec.displayName`
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 

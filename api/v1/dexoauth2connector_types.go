@@ -29,9 +29,9 @@ type DexOAuth2ConnectorSpec struct {
 	// +optional
 	ID string `json:"id,omitempty"`
 
-	// Name is the human-readable connector name shown on the Dex login page.
+	// DisplayName is the human-readable connector name shown on the Dex login page.
 	// +kubebuilder:validation:Required
-	Name string `json:"name"`
+	DisplayName string `json:"displayName"`
 
 	// ClientIDRef references the Secret key holding the OAuth2 client ID.
 	// +kubebuilder:validation:Required

@@ -87,6 +87,10 @@ spec:
                 - key
                 - name
                 type: object
+              displayName:
+                description: DisplayName is the human-readable connector name shown
+                  on the Dex login page.
+                type: string
               groups:
                 description: |-
                   Groups restricts login to users who are members of at least one of the
@@ -121,10 +125,6 @@ spec:
                 description: Issuer is the base URL of the OpenShift API server.
                 format: uri
                 type: string
-              name:
-                description: Name is the human-readable connector name shown on the
-                  Dex login page.
-                type: string
               redirectURI:
                 description: |-
                   RedirectURI is the callback URL registered with the OpenShift OAuth
@@ -148,9 +148,9 @@ spec:
             required:
             - clientIDRef
             - clientSecretRef
+            - displayName
             - installationRef
             - issuer
-            - name
             type: object
           status:
             description: |-

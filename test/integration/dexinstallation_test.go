@@ -180,7 +180,7 @@ func TestIntegration_StatusConnectorCount(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "okta", Namespace: ns},
 		Spec: dexv1.DexOIDCConnectorSpec{
 			InstallationRef: dexv1.InstallationRef{Name: inst.Name, Namespace: ns},
-			Name:            "Okta",
+			DisplayName:     "Okta",
 			Issuer:          "https://okta.example.com",
 			ClientIDRef:     dexv1.SecretKeyRef{Name: "oidc-creds", Key: "client-id"},
 			ClientSecretRef: dexv1.SecretKeyRef{Name: "oidc-creds", Key: "client-secret"},
@@ -224,7 +224,7 @@ func TestIntegration_AllowedNamespacesFilter(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "oidc-allowed", Namespace: nsAllowed},
 		Spec: dexv1.DexOIDCConnectorSpec{
 			InstallationRef: dexv1.InstallationRef{Name: inst.Name, Namespace: nsInst},
-			Name:            "Allowed",
+			DisplayName:     "Allowed",
 			Issuer:          "https://allowed.example.com",
 			ClientIDRef:     dexv1.SecretKeyRef{Name: "oidc-creds-allowed", Key: "client-id"},
 			ClientSecretRef: dexv1.SecretKeyRef{Name: "oidc-creds-allowed", Key: "client-secret"},
@@ -244,7 +244,7 @@ func TestIntegration_AllowedNamespacesFilter(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "oidc-forbidden", Namespace: nsForbidden},
 		Spec: dexv1.DexOIDCConnectorSpec{
 			InstallationRef: dexv1.InstallationRef{Name: inst.Name, Namespace: nsInst},
-			Name:            "Forbidden",
+			DisplayName:     "Forbidden",
 			Issuer:          "https://forbidden.example.com",
 			ClientIDRef:     dexv1.SecretKeyRef{Name: "oidc-creds-forbidden", Key: "client-id"},
 			ClientSecretRef: dexv1.SecretKeyRef{Name: "oidc-creds-forbidden", Key: "client-secret"},

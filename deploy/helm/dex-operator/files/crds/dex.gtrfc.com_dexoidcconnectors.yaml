@@ -112,6 +112,10 @@ spec:
                   DiscoveryPollInterval overrides how often the discovery document is
                   refreshed (Go duration string, e.g. "30m").
                 type: string
+              displayName:
+                description: DisplayName is the human-readable connector name shown
+                  on the Dex login page.
+                type: string
               getUserInfo:
                 description: GetUserInfo fetches additional claims from the userinfo
                   endpoint.
@@ -153,10 +157,6 @@ spec:
               issuer:
                 description: Issuer is the OIDC issuer URL of the upstream IdP.
                 format: uri
-                type: string
-              name:
-                description: Name is the human-readable connector name shown on the
-                  Dex login page.
                 type: string
               overrideClaimMapping:
                 description: OverrideClaimMapping enables overriding claim mapping
@@ -202,9 +202,9 @@ spec:
             required:
             - clientIDRef
             - clientSecretRef
+            - displayName
             - installationRef
             - issuer
-            - name
             type: object
           status:
             description: DexOIDCConnectorStatus defines the observed state of DexOIDCConnector.

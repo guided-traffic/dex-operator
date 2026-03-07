@@ -29,9 +29,9 @@ type DexLocalConnectorSpec struct {
 	// +optional
 	ID string `json:"id,omitempty"`
 
-	// Name is the human-readable connector name shown on the Dex login page.
+	// DisplayName is the human-readable connector name shown on the Dex login page.
 	// +kubebuilder:validation:Required
-	Name string `json:"name"`
+	DisplayName string `json:"displayName"`
 }
 
 // DexLocalConnectorStatus defines the observed state of DexLocalConnector.

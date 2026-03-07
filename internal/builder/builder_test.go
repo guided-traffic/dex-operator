@@ -172,7 +172,7 @@ func TestBuild_LocalConnector_EnablesPasswordDB(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "local", Namespace: "default"},
 				Spec: dexv1.DexLocalConnectorSpec{
 					InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "default"},
-					Name:            "Local Users",
+					DisplayName:     "Local Users",
 				},
 			},
 		},
@@ -208,7 +208,7 @@ func TestBuild_LDAPConnector(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "my-ldap", Namespace: "ns"},
 				Spec: dexv1.DexLDAPConnectorSpec{
 					InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
-					Name:            "Corp LDAP",
+					DisplayName:     "Corp LDAP",
 					Host:            "ldap.corp.example.com:636",
 					BindDN:          "cn=admin,dc=example,dc=com",
 					BindPWRef: &dexv1.SecretKeyRef{
@@ -280,7 +280,7 @@ func TestBuild_OIDCConnector(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "okta", Namespace: "ns"},
 				Spec: dexv1.DexOIDCConnectorSpec{
 					InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
-					Name:            "Okta",
+					DisplayName:     "Okta",
 					Issuer:          "https://example.okta.com",
 					ClientIDRef: dexv1.SecretKeyRef{
 						Name: "okta-creds",
@@ -341,7 +341,7 @@ func TestBuild_GitHubConnector(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "github", Namespace: "ns"},
 				Spec: dexv1.DexGitHubConnectorSpec{
 					InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
-					Name:            "GitHub",
+					DisplayName:     "GitHub",
 					ClientIDRef:     dexv1.SecretKeyRef{Name: "gh-creds", Key: "client-id"},
 					ClientSecretRef: dexv1.SecretKeyRef{Name: "gh-creds", Key: "client-secret"},
 					Orgs: []dexv1.GitHubOrg{
@@ -398,7 +398,7 @@ func TestBuild_StaticClient(t *testing.T) {
 					ClientIDKey:     "client-id",
 					ClientSecretKey: "client-secret",
 				},
-				Name:         "Grafana",
+				DisplayName:  "Grafana",
 				RedirectURIs: []string{"https://grafana.example.com/login/generic_oauth"},
 			},
 		},
@@ -437,6 +437,49 @@ func TestBuild_StaticClient(t *testing.T) {
 	}
 }
 
+// ── Build: StaticClient displayName is used directly ──────────────────────────
+
+func TestBuild_StaticClient_DisplayName(t *testing.T) {
+	inst := minimalInstallation("ns")
+
+	clients := []dexv1.DexStaticClient{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "pgadmin", Namespace: "ns"},
+			Spec: dexv1.DexStaticClientSpec{
+				InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
+				SecretRef: dexv1.StaticClientSecretRef{
+					Name:            "pgadmin-oidc",
+					ClientIDKey:     "client-id",
+					ClientSecretKey: "client-secret",
+				},
+				DisplayName:  "PgAdmin 4",
+				RedirectURIs: []string{"https://pgadmin.example.com/oauth2/authorize"},
+			},
+		},
+	}
+
+	secrets := map[string]string{
+		"ns/pgadmin-oidc[client-id]":     "pgadmin-id",
+		"ns/pgadmin-oidc[client-secret]": "s3cret",
+	}
+
+	out, err := builder.Build(context.Background(), builder.Input{
+		Installation:  inst,
+		StaticClients: clients,
+		Secrets:       mockResolver(secrets),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	m := parseYAML(t, out.ConfigYAML)
+	sc := m["staticClients"].([]any)[0].(map[string]any)
+
+	if sc["name"] != "PgAdmin 4" {
+		t.Errorf("staticClient name = %v, want PgAdmin 4", sc["name"])
+	}
+}
+
 // ── Build: SAML connector with CA mount ───────────────────────────────────────
 
 func TestBuild_SAMLConnector_CACertMounted(t *testing.T) {
@@ -448,7 +491,7 @@ func TestBuild_SAMLConnector_CACertMounted(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "saml-idp", Namespace: "ns"},
 				Spec: dexv1.DexSAMLConnectorSpec{
 					InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
-					Name:            "SAML IdP",
+					DisplayName:     "SAML IdP",
 					SSOURL:          "https://idp.example.com/sso",
 					CARef: &dexv1.SecretKeyRef{
 						Name: "saml-ca",
@@ -546,7 +589,7 @@ func TestBuild_SecretResolutionError(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "okta", Namespace: "ns"},
 				Spec: dexv1.DexOIDCConnectorSpec{
 					InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
-					Name:            "Okta",
+					DisplayName:     "Okta",
 					Issuer:          "https://example.okta.com",
 					ClientIDRef:     dexv1.SecretKeyRef{Name: "missing", Key: "client-id"},
 					ClientSecretRef: dexv1.SecretKeyRef{Name: "missing", Key: "client-secret"},

@@ -83,7 +83,7 @@ func buildOneStaticClient(
 	sc := StaticClient{
 		ID:           clientID,
 		Secret:       csRef,
-		Name:         c.Spec.Name,
+		Name:         c.Spec.DisplayName,
 		RedirectURIs: c.Spec.RedirectURIs,
 		Public:       c.Spec.Public,
 	}
