@@ -2,10 +2,43 @@
 
 A Kubernetes Operator (Go, controller-runtime) that dynamically assembles [Dex](https://dexidp.io/) configuration from Custom Resources.
 
-Dex is still installed via the official [Dex Helm Chart](https://github.com/dexidp/helm-charts). The operator generates two Secrets in the Dex namespace:
+Dex is installed separately via the official [Dex Helm Chart](https://github.com/dexidp/helm-charts). The operator watches for Custom Resources and generates two Secrets in the Dex namespace:
 
 - **Config-Secret** — Full Dex configuration as YAML (Issuer, Storage, Web, CORS, gRPC, Logger, Expiry, Connectors, Static Clients)
 - **Env-Secret** — All client secrets as environment variables (e.g. `GRAFANA_CLIENT_SECRET`), attached to the Dex container via `envFrom` and referenced in the config as `$ENV_VAR`
+
+## Installation
+
+### Prerequisites
+
+- Kubernetes cluster >= 1.25
+- Helm >= 3.x
+- Dex installed via the [official Helm Chart](https://github.com/dexidp/helm-charts)
+
+### Install the Operator
+
+```bash
+helm repo add dex-operator https://guided-traffic.github.io/dex-operator
+helm repo update
+
+helm install dex-operator dex-operator/dex-operator \
+  --namespace dex-operator-system \
+  --create-namespace
+```
+
+### Upgrade
+
+```bash
+helm repo update
+helm upgrade dex-operator dex-operator/dex-operator \
+  --namespace dex-operator-system
+```
+
+### Uninstall
+
+```bash
+helm uninstall dex-operator --namespace dex-operator-system
+```
 
 ## API Group
 
@@ -34,6 +67,173 @@ Dex is still installed via the official [Dex Helm Chart](https://github.com/dexi
 | `DexGiteaConnector` | Gitea identity provider connector |
 | `DexKeystoneConnector` | OpenStack Keystone connector |
 
+## Examples
+
+### DexInstallation
+
+A `DexInstallation` defines the global Dex configuration. The operator collects all associated connectors and static clients from allowed namespaces and writes the resulting configuration to the specified secrets.
+
+```yaml
+apiVersion: dex.gtrfc.com/v1
+kind: DexInstallation
+metadata:
+  name: main
+  namespace: dex
+spec:
+  issuer: https://dex.example.com
+  storage:
+    type: kubernetes
+  web:
+    http: 0.0.0.0:5556
+  logger:
+    level: info
+    format: json
+  oauth2:
+    skipApprovalScreen: true
+    responseTypes:
+      - code
+  expiry:
+    idTokens: 24h
+    signingKeys: 6h
+  configSecretName: dex-config
+  envSecretName: dex-env
+  allowedNamespaces:
+    - "*"
+  rolloutRestart:
+    enabled: true
+    deploymentName: dex
+```
+
+### DexStaticClient
+
+A `DexStaticClient` represents an OAuth2 client registered with Dex. It references a `DexInstallation` and an existing Kubernetes Secret containing `client-id` and `client-secret`.
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-oidc
+  namespace: monitoring
+type: Opaque
+stringData:
+  client-id: grafana
+  client-secret: my-super-secret
+---
+apiVersion: dex.gtrfc.com/v1
+kind: DexStaticClient
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  installationRef:
+    name: main
+    namespace: dex
+  name: Grafana
+  secretRef:
+    name: grafana-oidc
+    clientIDKey: client-id
+    clientSecretKey: client-secret
+  redirectURIs:
+    - https://grafana.example.com/login/generic_oauth
+  allowedScopes:
+    - openid
+    - profile
+    - email
+    - groups
+```
+
+### DexLDAPConnector
+
+A `DexLDAPConnector` configures Dex to authenticate users against an LDAP directory (e.g. Active Directory, OpenLDAP).
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ldap-credentials
+  namespace: dex
+type: Opaque
+stringData:
+  bind-password: my-ldap-password
+  root-ca.pem: |
+    -----BEGIN CERTIFICATE-----
+    ...
+    -----END CERTIFICATE-----
+---
+apiVersion: dex.gtrfc.com/v1
+kind: DexLDAPConnector
+metadata:
+  name: corporate-ldap
+  namespace: dex
+spec:
+  installationRef:
+    name: main
+    namespace: dex
+  name: Corporate LDAP
+  host: ldap.example.com:636
+  bindDN: cn=serviceaccount,dc=example,dc=com
+  bindPWRef:
+    name: ldap-credentials
+    key: bind-password
+  rootCARef:
+    name: ldap-credentials
+    key: root-ca.pem
+  userSearch:
+    baseDN: ou=Users,dc=example,dc=com
+    filter: "(objectClass=person)"
+    username: sAMAccountName
+    idAttr: DN
+    emailAttr: mail
+    nameAttr: displayName
+  groupSearch:
+    baseDN: ou=Groups,dc=example,dc=com
+    filter: "(objectClass=group)"
+    userAttr: DN
+    groupAttr: member
+    nameAttr: cn
+```
+
+### DexGitHubConnector
+
+A `DexGitHubConnector` enables authentication via GitHub OAuth. The GitHub OAuth app credentials are stored in a Kubernetes Secret.
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-oauth
+  namespace: dex
+type: Opaque
+stringData:
+  client-id: my-github-client-id
+  client-secret: my-github-client-secret
+---
+apiVersion: dex.gtrfc.com/v1
+kind: DexGitHubConnector
+metadata:
+  name: github
+  namespace: dex
+spec:
+  installationRef:
+    name: main
+    namespace: dex
+  name: GitHub
+  clientIDRef:
+    name: github-oauth
+    key: client-id
+  clientSecretRef:
+    name: github-oauth
+    key: client-secret
+  redirectURI: https://dex.example.com/callback
+  orgs:
+    - name: my-org
+      teams:
+        - developers
+        - platform
+  loadAllGroups: false
+  useLoginAsID: true
+```
+
 ## Architecture
 
 - The operator watches all namespaces.
@@ -60,10 +260,3 @@ make lint
 # Run tests
 make test
 ```
-
-## Helm Chart
-
-The operator is deployed via its own Helm chart located at `deploy/helm/dex-operator`.
-
-Dex itself is installed via the official Helm chart:
-<https://github.com/dexidp/helm-charts>
