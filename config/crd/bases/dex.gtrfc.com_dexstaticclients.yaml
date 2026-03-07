@@ -65,7 +65,7 @@ spec:
               displayName:
                 description: |-
                   DisplayName is the human-readable display name of the client shown on the
-                  Dex approval screen. Optional — if omitted the field is left empty.
+                  Dex approval screen.
                 type: string
               installationRef:
                 description: InstallationRef references the DexInstallation this client
@@ -122,6 +122,7 @@ spec:
                   type: string
                 type: array
             required:
+            - displayName
             - installationRef
             - redirectURIs
             - secretRef

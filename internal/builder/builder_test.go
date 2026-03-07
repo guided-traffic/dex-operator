@@ -437,9 +437,9 @@ func TestBuild_StaticClient(t *testing.T) {
 	}
 }
 
-// ── Build: StaticClient without displayName produces empty name ────────────────
+// ── Build: StaticClient displayName is used directly ──────────────────────────
 
-func TestBuild_StaticClient_EmptyDisplayName(t *testing.T) {
+func TestBuild_StaticClient_DisplayName(t *testing.T) {
 	inst := minimalInstallation("ns")
 
 	clients := []dexv1.DexStaticClient{
@@ -452,7 +452,7 @@ func TestBuild_StaticClient_EmptyDisplayName(t *testing.T) {
 					ClientIDKey:     "client-id",
 					ClientSecretKey: "client-secret",
 				},
-				// DisplayName deliberately omitted — should stay empty
+				DisplayName:  "PgAdmin 4",
 				RedirectURIs: []string{"https://pgadmin.example.com/oauth2/authorize"},
 			},
 		},
@@ -475,8 +475,8 @@ func TestBuild_StaticClient_EmptyDisplayName(t *testing.T) {
 	m := parseYAML(t, out.ConfigYAML)
 	sc := m["staticClients"].([]any)[0].(map[string]any)
 
-	if _, exists := sc["name"]; exists {
-		t.Errorf("staticClient name should be omitted when displayName is empty, got %v", sc["name"])
+	if sc["name"] != "PgAdmin 4" {
+		t.Errorf("staticClient name = %v, want PgAdmin 4", sc["name"])
 	}
 }
 

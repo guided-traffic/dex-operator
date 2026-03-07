@@ -30,9 +30,9 @@ type DexStaticClientSpec struct {
 	SecretRef StaticClientSecretRef `json:"secretRef"`
 
 	// DisplayName is the human-readable display name of the client shown on the
-	// Dex approval screen. Optional — if omitted the field is left empty.
-	// +optional
-	DisplayName string `json:"displayName,omitempty"`
+	// Dex approval screen.
+	// +kubebuilder:validation:Required
+	DisplayName string `json:"displayName"`
 
 	// RedirectURIs is the list of allowed redirect URIs.
 	// +kubebuilder:validation:Required
