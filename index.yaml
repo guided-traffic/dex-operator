@@ -1,0 +1,26 @@
+apiVersion: v1
+entries:
+  dex-operator:
+  - apiVersion: v2
+    appVersion: 1.0.0
+    created: "2026-03-07T09:09:00.633742365Z"
+    description: A Kubernetes Operator that dynamically assembles Dex configuration
+      from Custom Resources
+    digest: 68cdce61b7ae90dd5c9c6c4b2ae8d4d6ec96d9bf263d3cf8b7111c2abf231ec6
+    home: https://github.com/guided-traffic/dex-operator
+    keywords:
+    - dex
+    - operator
+    - oidc
+    - sso
+    kubeVersion: '>=1.25.0-0'
+    maintainers:
+    - name: guidedtraffic
+    name: dex-operator
+    sources:
+    - https://github.com/guided-traffic/dex-operator
+    type: application
+    urls:
+    - https://guided-traffic.github.io/dex-operator/dex-operator-1.0.0.tgz
+    version: 1.0.0
+generated: "2026-03-07T09:09:00.632452084Z"
