@@ -18,9 +18,11 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -29,6 +31,31 @@ import (
 
 	dexv1 "github.com/guided-traffic/dex-operator/api/v1"
 )
+
+// configRequeueInterval is the delay before a child resource with a
+// configuration error (e.g. missing DexInstallation) is re-checked.
+const configRequeueInterval = 5 * time.Minute
+
+// configError signals a user-caused configuration problem that will not
+// resolve by simple retrying. The controller logs these at WARN level
+// and requeues after a long interval instead of using the default
+// exponential back-off.
+type configError struct {
+	msg string
+}
+
+func (e *configError) Error() string { return e.msg }
+
+// newConfigError creates a configError with the given message.
+func newConfigError(msg string) *configError {
+	return &configError{msg: msg}
+}
+
+// isConfigError returns true when err (or any wrapped cause) is a configError.
+func isConfigError(err error) bool {
+	var ce *configError
+	return errors.As(err, &ce)
+}
 
 // GenericChildReconciler is a generic controller for all child resources
 // (connectors and static clients).  It validates namespace access against
@@ -62,9 +89,21 @@ func (r *GenericChildReconciler[T, U]) Reconcile(ctx context.Context, req ctrl.R
 	ptr.GetCommonStatus().ObservedGeneration = ptr.GetGeneration()
 
 	if statusErr := r.Status().Update(ctx, ptr); statusErr != nil {
-		if !errors.IsConflict(statusErr) {
+		if !apierrors.IsConflict(statusErr) {
 			logger.Error(statusErr, "failed to update child resource status")
 		}
+	}
+
+	// Configuration errors are caused by the user (wrong installationRef,
+	// forbidden namespace, …). Log a clear warning and requeue after a long
+	// interval instead of returning an error, which would trigger
+	// controller-runtime's exponential back-off with noisy stack traces.
+	if isConfigError(reconcileErr) {
+		logger.Info("configuration error on child resource, will retry",
+			"reason", reconcileErr.Error(),
+			"requeueAfter", configRequeueInterval,
+		)
+		return ctrl.Result{RequeueAfter: configRequeueInterval}, nil
 	}
 
 	return ctrl.Result{}, reconcileErr
@@ -88,16 +127,18 @@ func (r *GenericChildReconciler[T, U]) reconcileChild(ctx context.Context, obj T
 		Namespace: ref.Namespace,
 		Name:      ref.Name,
 	}, &installation); err != nil {
-		if errors.IsNotFound(err) {
-			return fmt.Errorf("referenced DexInstallation %s/%s not found", ref.Namespace, ref.Name)
+		if apierrors.IsNotFound(err) {
+			return newConfigError(fmt.Sprintf(
+				"referenced DexInstallation %s/%s not found", ref.Namespace, ref.Name))
 		}
 		return fmt.Errorf("fetching DexInstallation %s/%s: %w", ref.Namespace, ref.Name, err)
 	}
 
 	sourceNS := obj.GetNamespace()
 	if !isNamespaceAllowed(sourceNS, installation.Spec.AllowedNamespaces) {
-		return fmt.Errorf("namespace %q is not in DexInstallation %s/%s allowedNamespaces",
-			sourceNS, ref.Namespace, ref.Name)
+		return newConfigError(fmt.Sprintf(
+			"namespace %q is not in DexInstallation %s/%s allowedNamespaces",
+			sourceNS, ref.Namespace, ref.Name))
 	}
 
 	return nil

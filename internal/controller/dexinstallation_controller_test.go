@@ -269,7 +269,8 @@ func TestReconcile_SecretReuse(t *testing.T) {
 // ── child reconciler ─────────────────────────────────────────────────────────
 
 // TestChildReconciler_NamespaceNotAllowed verifies that a connector in a
-// forbidden namespace gets an Error condition on its status.
+// forbidden namespace gets an Error condition on its status and is requeued
+// after a long interval without returning an error (no stack trace).
 func TestChildReconciler_NamespaceNotAllowed(t *testing.T) {
 	inst := &dexv1.DexInstallation{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-inst", Namespace: "dex"},
@@ -302,13 +303,15 @@ func TestChildReconciler_NamespaceNotAllowed(t *testing.T) {
 		Scheme: scheme,
 	}
 
-	_, err := r.Reconcile(context.Background(), ctrl.Request{
+	result, err := r.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: types.NamespacedName{Name: "local-conn", Namespace: "forbidden-ns"},
 	})
-	// Reconcile returns an error so controller-runtime retries; the error is
-	// also reflected via the Ready=False condition on the resource's status.
-	if err == nil {
-		t.Fatal("expected error for connector in forbidden namespace")
+	// Config errors must NOT be returned as errors (no stack trace / backoff).
+	if err != nil {
+		t.Fatalf("expected no error for config problem, got %v", err)
+	}
+	if result.RequeueAfter == 0 {
+		t.Error("expected non-zero RequeueAfter for config error")
 	}
 
 	var updated dexv1.DexLocalConnector
@@ -325,6 +328,58 @@ func TestChildReconciler_NamespaceNotAllowed(t *testing.T) {
 	}
 	if readyCond.Status != metav1.ConditionFalse {
 		t.Errorf("expected Ready=False for forbidden namespace, got %v", readyCond.Status)
+	}
+}
+
+// TestChildReconciler_InstallationNotFound verifies that a connector referencing
+// a non-existent DexInstallation gets a clean warning rather than a noisy error.
+func TestChildReconciler_InstallationNotFound(t *testing.T) {
+	connector := &dexv1.DexLocalConnector{
+		ObjectMeta: metav1.ObjectMeta{Name: "local-conn", Namespace: "iam"},
+		Spec: dexv1.DexLocalConnectorSpec{
+			InstallationRef: dexv1.InstallationRef{Name: "nonexistent", Namespace: "dex"},
+			Name:            "Local",
+		},
+	}
+
+	scheme := newTestScheme(t)
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(connector).
+		WithStatusSubresource(&dexv1.DexLocalConnector{}).
+		Build()
+
+	r := &controller.GenericChildReconciler[*dexv1.DexLocalConnector, dexv1.DexLocalConnector]{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	result, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "local-conn", Namespace: "iam"},
+	})
+	if err != nil {
+		t.Fatalf("expected no error for missing installation, got %v", err)
+	}
+	if result.RequeueAfter == 0 {
+		t.Error("expected non-zero RequeueAfter for config error")
+	}
+
+	var updated dexv1.DexLocalConnector
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{
+		Name: "local-conn", Namespace: "iam",
+	}, &updated); err != nil {
+		t.Fatalf("fetching updated connector: %v", err)
+	}
+
+	readyCond := findCondition(updated.Status.Conditions, dexv1.ConditionTypeReady)
+	if readyCond == nil {
+		t.Fatal("Ready condition not set")
+	}
+	if readyCond.Status != metav1.ConditionFalse {
+		t.Errorf("expected Ready=False, got %v", readyCond.Status)
+	}
+	if !contains(readyCond.Message, "not found") {
+		t.Errorf("expected message to mention 'not found', got %q", readyCond.Message)
 	}
 }
 
