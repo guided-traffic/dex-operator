@@ -27,3 +27,9 @@ var SecretDataEqual = secretDataEqual
 
 // CountConnectors exposes [countConnectors] for white-box testing.
 var CountConnectors = countConnectors
+
+// IsConfigError exposes [isConfigError] for white-box testing.
+var IsConfigError = isConfigError
+
+// NewConfigError exposes [newConfigError] for white-box testing.
+var NewConfigError = newConfigError

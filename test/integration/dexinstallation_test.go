@@ -112,19 +112,21 @@ func TestIntegration_Idempotency(t *testing.T) {
 	s1 := getSecret(ns, inst.Spec.ConfigSecretName)
 	rv1 := s1.ResourceVersion
 
-	// Touch the status to trigger another reconcile round by updating a label.
-	var updated dexv1.DexInstallation
-	if err := k8sClient.Get(context.Background(),
-		client.ObjectKey{Namespace: ns, Name: inst.Name}, &updated); err != nil {
-		t.Fatalf("get installation: %v", err)
-	}
-	if updated.Labels == nil {
-		updated.Labels = map[string]string{}
-	}
-	updated.Labels["test.gtrfc.com/touch"] = "1"
-	if err := k8sClient.Update(context.Background(), &updated); err != nil {
-		t.Fatalf("update installation labels: %v", err)
-	}
+	// Touch the installation to trigger another reconcile round by updating a label.
+	// Use a retry loop because the reconciler may update the status concurrently,
+	// causing an optimistic-concurrency conflict on the first attempt.
+	eventually(t, func() bool {
+		var latest dexv1.DexInstallation
+		if err := k8sClient.Get(context.Background(),
+			client.ObjectKey{Namespace: ns, Name: inst.Name}, &latest); err != nil {
+			return false
+		}
+		if latest.Labels == nil {
+			latest.Labels = map[string]string{}
+		}
+		latest.Labels["test.gtrfc.com/touch"] = "1"
+		return k8sClient.Update(context.Background(), &latest) == nil
+	}, "failed to update installation labels")
 
 	// Give the manager a moment to process the update.
 	eventually(t, func() bool {

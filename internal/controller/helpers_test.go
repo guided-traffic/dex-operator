@@ -17,6 +17,7 @@ limitations under the License.
 package controller_test
 
 import (
+	"fmt"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -74,6 +75,29 @@ func TestRolloutEnabled(t *testing.T) {
 			got := controller.RolloutEnabled(inst)
 			if got != tc.want {
 				t.Errorf("RolloutEnabled() = %v; want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// ── isConfigError ─────────────────────────────────────────────────────────────
+
+func TestIsConfigError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"plain error", fmt.Errorf("something broke"), false},
+		{"config error", controller.NewConfigError("bad ref"), true},
+		{"wrapped config error", fmt.Errorf("outer: %w", controller.NewConfigError("bad ref")), true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := controller.IsConfigError(tc.err)
+			if got != tc.want {
+				t.Errorf("IsConfigError() = %v; want %v", got, tc.want)
 			}
 		})
 	}

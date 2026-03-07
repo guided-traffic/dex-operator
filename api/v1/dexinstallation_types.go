@@ -53,6 +53,10 @@ type DexInstallationSpec struct {
 	// +optional
 	OAuth2 *DexOAuth2ConfigSpec `json:"oauth2,omitempty"`
 
+	// Frontend configures the Dex web frontend appearance.
+	// +optional
+	Frontend *DexFrontendSpec `json:"frontend,omitempty"`
+
 	// ConfigSecretName is the name of the Secret written to the Dex namespace
 	// that holds the rendered Dex config.yaml.
 	// +kubebuilder:validation:Required
@@ -379,6 +383,25 @@ type DexOAuth2ConfigSpec struct {
 	// Credentials grant type.
 	// +optional
 	PasswordConnector string `json:"passwordConnector,omitempty"`
+}
+
+// DexFrontendSpec configures the Dex web frontend appearance.
+type DexFrontendSpec struct {
+	// Dir is the path to the web assets directory.
+	// +optional
+	Dir string `json:"dir,omitempty"`
+
+	// Theme selects the Dex UI theme (e.g. "dark", "light", "coreos", "tectonic").
+	// +optional
+	Theme string `json:"theme,omitempty"`
+
+	// Issuer overrides the issuer string displayed in the Dex UI.
+	// +optional
+	Issuer string `json:"issuer,omitempty"`
+
+	// LogoURL is the URL of a logo to display in the Dex UI.
+	// +optional
+	LogoURL string `json:"logoURL,omitempty"`
 }
 
 // RolloutRestartSpec configures optional automated rollout restart.

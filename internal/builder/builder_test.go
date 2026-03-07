@@ -489,6 +489,7 @@ func TestBuild_FullInstallationOptions(t *testing.T) {
 	inst.Spec.Expiry = &dexv1.DexExpirySpec{IDTokens: "24h", SigningKeys: "6h"}
 	inst.Spec.OAuth2 = &dexv1.DexOAuth2ConfigSpec{SkipApprovalScreen: true}
 	inst.Spec.GRPC = &dexv1.DexGRPCSpec{Addr: "0.0.0.0:5557"}
+	inst.Spec.Frontend = &dexv1.DexFrontendSpec{Theme: "dark", Issuer: "My Corp"}
 
 	out, err := builder.Build(context.Background(), builder.Input{
 		Installation: inst,
@@ -523,6 +524,14 @@ func TestBuild_FullInstallationOptions(t *testing.T) {
 	grpc := m["grpc"].(map[string]any)
 	if grpc["addr"] != "0.0.0.0:5557" {
 		t.Errorf("grpc.addr = %v", grpc["addr"])
+	}
+
+	frontend := m["frontend"].(map[string]any)
+	if frontend["theme"] != "dark" {
+		t.Errorf("frontend.theme = %v", frontend["theme"])
+	}
+	if frontend["issuer"] != "My Corp" {
+		t.Errorf("frontend.issuer = %v", frontend["issuer"])
 	}
 }
 
