@@ -182,7 +182,7 @@ func TestIntegration_MultipleStaticClients(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: c.name, Namespace: ns},
 			Spec: dexv1.DexStaticClientSpec{
 				InstallationRef: dexv1.InstallationRef{Name: inst.Name, Namespace: ns},
-				Name:            c.name,
+				DisplayName:     c.name,
 				RedirectURIs:    []string{c.redirectURI},
 				SecretRef: dexv1.StaticClientSecretRef{
 					Name:            c.name + "-creds",
