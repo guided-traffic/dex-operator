@@ -25,6 +25,9 @@ RUN go mod download
 # Copy source code
 COPY . .
 
+# Ensure go.mod is tidy (safety net for CI — Renovate may leave go.mod slightly out of sync)
+RUN go mod tidy
+
 # Build the application with cross-compilation support
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build -a -installsuffix cgo \
