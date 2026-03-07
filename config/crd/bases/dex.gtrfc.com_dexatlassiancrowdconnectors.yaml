@@ -111,6 +111,10 @@ spec:
                 - key
                 - name
                 type: object
+              displayName:
+                description: DisplayName is the human-readable connector name shown
+                  on the Dex login page.
+                type: string
               groups:
                 description: |-
                   Groups restricts login to users who are members of at least one of the
@@ -136,10 +140,6 @@ spec:
                 - name
                 - namespace
                 type: object
-              name:
-                description: Name is the human-readable connector name shown on the
-                  Dex login page.
-                type: string
               redirectURI:
                 description: RedirectURI is the callback URL for the Crowd connector.
                 type: string
@@ -147,8 +147,8 @@ spec:
             - baseURL
             - clientIDRef
             - clientSecretRef
+            - displayName
             - installationRef
-            - name
             type: object
           status:
             description: |-

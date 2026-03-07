@@ -82,6 +82,10 @@ spec:
                 - key
                 - name
                 type: object
+              displayName:
+                description: DisplayName is the human-readable connector name shown
+                  on the Dex login page.
+                type: string
               hostName:
                 description: |-
                   HostName allows connecting to a GitHub Enterprise instance.
@@ -110,10 +114,6 @@ spec:
                   LoadAllGroups loads all GitHub organizations (and their teams) for the
                   authenticated user, not just the Orgs listed above.
                 type: boolean
-              name:
-                description: Name is the human-readable connector name shown on the
-                  Dex login page.
-                type: string
               orgs:
                 description: |-
                   Orgs filters login to users that belong to one of the listed GitHub
@@ -170,8 +170,8 @@ spec:
             required:
             - clientIDRef
             - clientSecretRef
+            - displayName
             - installationRef
-            - name
             type: object
           status:
             description: DexGitHubConnectorStatus defines the observed state of DexGitHubConnector.

@@ -45,7 +45,7 @@ func TestIntegration_OIDCConnector(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "google-workspace", Namespace: ns},
 		Spec: dexv1.DexOIDCConnectorSpec{
 			InstallationRef: dexv1.InstallationRef{Name: inst.Name, Namespace: ns},
-			Name:            "Google Workspace",
+			DisplayName:     "Google Workspace",
 			Issuer:          "https://accounts.google.com",
 			ClientIDRef:     dexv1.SecretKeyRef{Name: "oidc-creds", Key: "client-id"},
 			ClientSecretRef: dexv1.SecretKeyRef{Name: "oidc-creds", Key: "client-secret"},
@@ -104,7 +104,7 @@ func TestIntegration_LDAPConnector(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "company-ldap", Namespace: ns},
 		Spec: dexv1.DexLDAPConnectorSpec{
 			InstallationRef: dexv1.InstallationRef{Name: inst.Name, Namespace: ns},
-			Name:            "Company LDAP",
+			DisplayName:     "Company LDAP",
 			Host:            "ldap.example.com:636",
 			BindDN:          "cn=admin,dc=example,dc=com",
 			BindPWRef:       &bindPWRef,
@@ -141,7 +141,7 @@ func TestIntegration_GitHubConnector(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "github", Namespace: ns},
 		Spec: dexv1.DexGitHubConnectorSpec{
 			InstallationRef: dexv1.InstallationRef{Name: inst.Name, Namespace: ns},
-			Name:            "GitHub",
+			DisplayName:     "GitHub",
 			ClientIDRef:     dexv1.SecretKeyRef{Name: "gh-creds", Key: "client-id"},
 			ClientSecretRef: dexv1.SecretKeyRef{Name: "gh-creds", Key: "client-secret"},
 		},
@@ -171,7 +171,7 @@ func TestIntegration_ConnectorForbiddenNamespace(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "local", Namespace: nsForbidden},
 		Spec: dexv1.DexLocalConnectorSpec{
 			InstallationRef: dexv1.InstallationRef{Name: inst.Name, Namespace: nsInst},
-			Name:            "Local",
+			DisplayName:     "Local",
 		},
 	}
 	if err := k8sClient.Create(context.Background(), conn); err != nil {
@@ -207,7 +207,7 @@ func TestIntegration_ConnectorDeleteTriggersReconcile(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "to-delete", Namespace: ns},
 		Spec: dexv1.DexOIDCConnectorSpec{
 			InstallationRef: dexv1.InstallationRef{Name: inst.Name, Namespace: ns},
-			Name:            "ToDelete",
+			DisplayName:     "ToDelete",
 			Issuer:          "https://delete-me.example.com",
 			ClientIDRef:     dexv1.SecretKeyRef{Name: "oidc-del-creds", Key: "client-id"},
 			ClientSecretRef: dexv1.SecretKeyRef{Name: "oidc-del-creds", Key: "client-secret"},

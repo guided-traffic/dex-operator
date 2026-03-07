@@ -112,7 +112,7 @@ func buildLDAPConnector(
 		cfg["groupSearch"] = buildLDAPGroupSearch(*c.Spec.GroupSearch)
 	}
 
-	return ConnectorEntry{Type: "ldap", ID: id, Name: c.Spec.Name, Config: cfg}, mounts, nil
+	return ConnectorEntry{Type: "ldap", ID: id, Name: c.Spec.DisplayName, Config: cfg}, mounts, nil
 }
 
 func applyLDAPBoolFlags(cfg map[string]any, spec dexv1.DexLDAPConnectorSpec) {
@@ -247,7 +247,7 @@ func buildSAMLConnector(c *dexv1.DexSAMLConnector) (ConnectorEntry, []MountedSec
 		cfg["insecureSkipSignatureValidation"] = true
 	}
 
-	return ConnectorEntry{Type: "saml", ID: id, Name: c.Spec.Name, Config: cfg}, mounts, nil
+	return ConnectorEntry{Type: "saml", ID: id, Name: c.Spec.DisplayName, Config: cfg}, mounts, nil
 }
 
 // ── AuthProxy ─────────────────────────────────────────────────────────────────
@@ -269,5 +269,5 @@ func buildAuthProxyConnector(c *dexv1.DexAuthProxyConnector) ConnectorEntry {
 		cfg["groups"] = c.Spec.Groups
 	}
 
-	return ConnectorEntry{Type: "authproxy", ID: id, Name: c.Spec.Name, Config: cfg}
+	return ConnectorEntry{Type: "authproxy", ID: id, Name: c.Spec.DisplayName, Config: cfg}
 }

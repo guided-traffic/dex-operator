@@ -58,6 +58,10 @@ spec:
               connector. This connector delegates authentication to an HTTP reverse proxy
               that sets a header with the authenticated user's identity.
             properties:
+              displayName:
+                description: DisplayName is the human-readable connector name shown
+                  on the Dex login page.
+                type: string
               getUserInfo:
                 description: GetUserInfo fetches additional user information from
                   the reverse proxy.
@@ -96,13 +100,9 @@ spec:
                 - name
                 - namespace
                 type: object
-              name:
-                description: Name is the human-readable connector name shown on the
-                  Dex login page.
-                type: string
             required:
+            - displayName
             - installationRef
-            - name
             type: object
           status:
             description: |-

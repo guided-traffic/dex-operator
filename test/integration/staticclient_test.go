@@ -45,7 +45,7 @@ func TestIntegration_StaticClient(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "grafana", Namespace: ns},
 		Spec: dexv1.DexStaticClientSpec{
 			InstallationRef: dexv1.InstallationRef{Name: inst.Name, Namespace: ns},
-			Name:            "Grafana",
+			DisplayName:     "Grafana",
 			RedirectURIs:    []string{"https://grafana.example.com/login/generic_oauth"},
 			SecretRef: dexv1.StaticClientSecretRef{
 				Name:            "grafana-creds",
@@ -117,7 +117,7 @@ func TestIntegration_StaticClientDelete(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "my-app", Namespace: ns},
 		Spec: dexv1.DexStaticClientSpec{
 			InstallationRef: dexv1.InstallationRef{Name: inst.Name, Namespace: ns},
-			Name:            "My App",
+			DisplayName:     "My App",
 			RedirectURIs:    []string{"https://my-app.example.com/callback"},
 			SecretRef: dexv1.StaticClientSecretRef{
 				Name:            "app-creds",

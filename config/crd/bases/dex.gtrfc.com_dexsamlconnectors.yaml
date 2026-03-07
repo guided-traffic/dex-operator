@@ -91,6 +91,10 @@ spec:
                 - key
                 - name
                 type: object
+              displayName:
+                description: DisplayName is the human-readable connector name shown
+                  on the Dex login page.
+                type: string
               emailAttr:
                 description: EmailAttr is the SAML attribute mapped to the email claim.
                 type: string
@@ -125,10 +129,6 @@ spec:
                 - name
                 - namespace
                 type: object
-              name:
-                description: Name is the human-readable connector name shown on the
-                  Dex login page.
-                type: string
               nameIDPolicyFormat:
                 description: NameIDPolicyFormat controls the NameID format requested
                   from the IdP.
@@ -150,8 +150,8 @@ spec:
                   claim.
                 type: string
             required:
+            - displayName
             - installationRef
-            - name
             - ssoURL
             type: object
           status:

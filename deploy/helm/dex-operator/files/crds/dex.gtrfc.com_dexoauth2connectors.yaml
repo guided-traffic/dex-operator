@@ -104,6 +104,10 @@ spec:
                 - key
                 - name
                 type: object
+              displayName:
+                description: DisplayName is the human-readable connector name shown
+                  on the Dex login page.
+                type: string
               headerPrefix:
                 description: HeaderPrefix is prepended to the Authorization header
                   value.
@@ -130,10 +134,6 @@ spec:
                 - name
                 - namespace
                 type: object
-              name:
-                description: Name is the human-readable connector name shown on the
-                  Dex login page.
-                type: string
               redirectURI:
                 description: RedirectURI is the callback URL registered with the OAuth2
                   provider.
@@ -168,8 +168,8 @@ spec:
             - authorizationURL
             - clientIDRef
             - clientSecretRef
+            - displayName
             - installationRef
-            - name
             - tokenURL
             type: object
           status:

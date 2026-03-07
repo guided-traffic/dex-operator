@@ -109,7 +109,7 @@ func TestE2E_OIDCConnector(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "okta", Namespace: ns},
 		Spec: dexv1.DexOIDCConnectorSpec{
 			InstallationRef: dexv1.InstallationRef{Name: "dex", Namespace: ns},
-			Name:            "Okta",
+			DisplayName:     "Okta",
 			Issuer:          "https://e2e-okta.example.com",
 			ClientIDRef:     dexv1.SecretKeyRef{Name: "oidc-creds", Key: "client-id"},
 			ClientSecretRef: dexv1.SecretKeyRef{Name: "oidc-creds", Key: "client-secret"},
@@ -167,7 +167,7 @@ func TestE2E_StaticClient(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "grafana", Namespace: ns},
 		Spec: dexv1.DexStaticClientSpec{
 			InstallationRef: dexv1.InstallationRef{Name: "dex", Namespace: ns},
-			Name:            "Grafana",
+			DisplayName:     "Grafana",
 			RedirectURIs:    []string{"https://grafana.e2e.example.com/login/generic_oauth"},
 			SecretRef: dexv1.StaticClientSecretRef{
 				Name:            "grafana-creds",
@@ -230,7 +230,7 @@ func TestE2E_NamespaceIsolation(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "allowed", Namespace: nsAllowed},
 		Spec: dexv1.DexOIDCConnectorSpec{
 			InstallationRef: dexv1.InstallationRef{Name: "dex", Namespace: nsInst},
-			Name:            "Allowed",
+			DisplayName:     "Allowed",
 			Issuer:          "https://allowed.e2e.example.com",
 			ClientIDRef:     dexv1.SecretKeyRef{Name: "oidc-a", Key: "client-id"},
 			ClientSecretRef: dexv1.SecretKeyRef{Name: "oidc-a", Key: "client-secret"},
@@ -250,7 +250,7 @@ func TestE2E_NamespaceIsolation(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "forbidden", Namespace: nsForbidden},
 		Spec: dexv1.DexOIDCConnectorSpec{
 			InstallationRef: dexv1.InstallationRef{Name: "dex", Namespace: nsInst},
-			Name:            "Forbidden",
+			DisplayName:     "Forbidden",
 			Issuer:          "https://forbidden.e2e.example.com",
 			ClientIDRef:     dexv1.SecretKeyRef{Name: "oidc-f", Key: "client-id"},
 			ClientSecretRef: dexv1.SecretKeyRef{Name: "oidc-f", Key: "client-secret"},
@@ -309,7 +309,7 @@ func TestE2E_ConnectorLifecycle(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "lifecycle-conn", Namespace: ns},
 		Spec: dexv1.DexOIDCConnectorSpec{
 			InstallationRef: dexv1.InstallationRef{Name: "dex", Namespace: ns},
-			Name:            "Lifecycle",
+			DisplayName:     "Lifecycle",
 			Issuer:          "https://lifecycle.e2e.example.com",
 			ClientIDRef:     dexv1.SecretKeyRef{Name: "lc-creds", Key: "client-id"},
 			ClientSecretRef: dexv1.SecretKeyRef{Name: "lc-creds", Key: "client-secret"},

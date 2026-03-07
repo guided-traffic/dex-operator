@@ -55,6 +55,10 @@ spec:
               DexLocalConnectorSpec defines configuration for the Dex local (builtin)
               password connector. User credentials are stored in a Kubernetes Secret.
             properties:
+              displayName:
+                description: DisplayName is the human-readable connector name shown
+                  on the Dex login page.
+                type: string
               id:
                 description: ID is the connector ID used internally by Dex. Defaults
                   to metadata.name.
@@ -73,13 +77,9 @@ spec:
                 - name
                 - namespace
                 type: object
-              name:
-                description: Name is the human-readable connector name shown on the
-                  Dex login page.
-                type: string
             required:
+            - displayName
             - installationRef
-            - name
             type: object
           status:
             description: DexLocalConnectorStatus defines the observed state of DexLocalConnector.

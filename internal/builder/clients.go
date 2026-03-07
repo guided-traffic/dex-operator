@@ -80,10 +80,12 @@ func buildOneStaticClient(
 		return StaticClient{}, fmt.Errorf("client-secret: %w", err)
 	}
 
+	displayName := c.Spec.DisplayName
+
 	sc := StaticClient{
 		ID:           clientID,
 		Secret:       csRef,
-		Name:         c.Spec.Name,
+		Name:         displayName,
 		RedirectURIs: c.Spec.RedirectURIs,
 		Public:       c.Spec.Public,
 	}

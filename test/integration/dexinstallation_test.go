@@ -180,7 +180,7 @@ func TestIntegration_StatusConnectorCount(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "okta", Namespace: ns},
 		Spec: dexv1.DexOIDCConnectorSpec{
 			InstallationRef: dexv1.InstallationRef{Name: inst.Name, Namespace: ns},
-			Name:            "Okta",
+			DisplayName:     "Okta",
 			Issuer:          "https://okta.example.com",
 			ClientIDRef:     dexv1.SecretKeyRef{Name: "oidc-creds", Key: "client-id"},
 			ClientSecretRef: dexv1.SecretKeyRef{Name: "oidc-creds", Key: "client-secret"},

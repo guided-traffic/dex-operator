@@ -275,7 +275,7 @@ func buildGitHubConnector(
 		cfg["rootCA"] = mountCertFile(*c.Spec.RootCARef, c.Namespace, id, "root-ca", &mounts)
 	}
 
-	return ConnectorEntry{Type: "github", ID: id, Name: c.Spec.Name, Config: cfg}, mounts, nil
+	return ConnectorEntry{Type: "github", ID: id, Name: c.Spec.DisplayName, Config: cfg}, mounts, nil
 }
 
 func buildGitHubOrgs(orgs []dexv1.GitHubOrg) []map[string]any {
@@ -323,7 +323,7 @@ func buildGitLabConnector(
 		cfg["useLoginAsID"] = true
 	}
 
-	return ConnectorEntry{Type: "gitlab", ID: id, Name: c.Spec.Name, Config: cfg}, nil, nil
+	return ConnectorEntry{Type: "gitlab", ID: id, Name: c.Spec.DisplayName, Config: cfg}, nil, nil
 }
 
 // ── Google ────────────────────────────────────────────────────────────────────
@@ -367,7 +367,7 @@ func buildGoogleConnector(
 		cfg["serviceAccountFilePath"] = mountSecretAsFile(*c.Spec.ServiceAccountFileRef, c.Namespace, path, &mounts)
 	}
 
-	return ConnectorEntry{Type: "google", ID: id, Name: c.Spec.Name, Config: cfg}, mounts, nil
+	return ConnectorEntry{Type: "google", ID: id, Name: c.Spec.DisplayName, Config: cfg}, mounts, nil
 }
 
 // ── LinkedIn ──────────────────────────────────────────────────────────────────
@@ -393,7 +393,7 @@ func buildLinkedInConnector(
 		cfg["redirectURI"] = c.Spec.RedirectURI
 	}
 
-	return ConnectorEntry{Type: "linkedin", ID: id, Name: c.Spec.Name, Config: cfg}, nil, nil
+	return ConnectorEntry{Type: "linkedin", ID: id, Name: c.Spec.DisplayName, Config: cfg}, nil, nil
 }
 
 // ── Microsoft ─────────────────────────────────────────────────────────────────
@@ -435,7 +435,7 @@ func buildMicrosoftConnector(
 		cfg["domainHint"] = c.Spec.DomainHint
 	}
 
-	return ConnectorEntry{Type: "microsoft", ID: id, Name: c.Spec.Name, Config: cfg}, nil, nil
+	return ConnectorEntry{Type: "microsoft", ID: id, Name: c.Spec.DisplayName, Config: cfg}, nil, nil
 }
 
 // ── OIDC ──────────────────────────────────────────────────────────────────────
@@ -469,7 +469,7 @@ func buildOIDCConnector(
 		cfg["claimMapping"] = buildOIDCClaimMapping(*c.Spec.ClaimMapping)
 	}
 
-	return ConnectorEntry{Type: "oidc", ID: id, Name: c.Spec.Name, Config: cfg}, mounts, nil
+	return ConnectorEntry{Type: "oidc", ID: id, Name: c.Spec.DisplayName, Config: cfg}, mounts, nil
 }
 
 func applyOIDCOptionalFields(cfg map[string]any, spec dexv1.DexOIDCConnectorSpec) {
@@ -573,7 +573,7 @@ func buildOAuth2Connector(
 		cfg["rootCA"] = mountCertFile(*c.Spec.RootCARef, c.Namespace, id, "root-ca", &mounts)
 	}
 
-	return ConnectorEntry{Type: "oauth", ID: id, Name: c.Spec.Name, Config: cfg}, mounts, nil
+	return ConnectorEntry{Type: "oauth", ID: id, Name: c.Spec.DisplayName, Config: cfg}, mounts, nil
 }
 
 func buildOAuth2ClaimMapping(m dexv1.OAuth2ClaimMapping) map[string]any {
@@ -625,7 +625,7 @@ func buildOpenShiftConnector(
 		cfg["rootCA"] = mountCertFile(*c.Spec.RootCARef, c.Namespace, id, "root-ca", &mounts)
 	}
 
-	return ConnectorEntry{Type: "openshift", ID: id, Name: c.Spec.Name, Config: cfg}, mounts, nil
+	return ConnectorEntry{Type: "openshift", ID: id, Name: c.Spec.DisplayName, Config: cfg}, mounts, nil
 }
 
 // ── AtlassianCrowd ────────────────────────────────────────────────────────────
@@ -667,7 +667,7 @@ func buildAtlassianCrowdConnector(
 		cfg["adminPassword"] = pwRef
 	}
 
-	return ConnectorEntry{Type: "atlassian-crowd", ID: id, Name: c.Spec.Name, Config: cfg}, nil, nil
+	return ConnectorEntry{Type: "atlassian-crowd", ID: id, Name: c.Spec.DisplayName, Config: cfg}, nil, nil
 }
 
 // ── Gitea ─────────────────────────────────────────────────────────────────────
@@ -708,7 +708,7 @@ func buildGiteaConnector(
 		cfg["rootCA"] = mountCertFile(*c.Spec.RootCARef, c.Namespace, id, "root-ca", &mounts)
 	}
 
-	return ConnectorEntry{Type: "gitea", ID: id, Name: c.Spec.Name, Config: cfg}, mounts, nil
+	return ConnectorEntry{Type: "gitea", ID: id, Name: c.Spec.DisplayName, Config: cfg}, mounts, nil
 }
 
 // ── Bitbucket ─────────────────────────────────────────────────────────────────
@@ -738,7 +738,7 @@ func buildBitbucketConnector(
 		cfg["teams"] = c.Spec.Teams
 	}
 
-	return ConnectorEntry{Type: "bitbucket-cloud", ID: id, Name: c.Spec.Name, Config: cfg}, nil, nil
+	return ConnectorEntry{Type: "bitbucket-cloud", ID: id, Name: c.Spec.DisplayName, Config: cfg}, nil, nil
 }
 
 // ── Keystone ──────────────────────────────────────────────────────────────────
@@ -776,5 +776,5 @@ func buildKeystoneConnector(
 		cfg["groups"] = c.Spec.Groups
 	}
 
-	return ConnectorEntry{Type: "keystone", ID: id, Name: c.Spec.Name, Config: cfg}, nil, nil
+	return ConnectorEntry{Type: "keystone", ID: id, Name: c.Spec.DisplayName, Config: cfg}, nil, nil
 }

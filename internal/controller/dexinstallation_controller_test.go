@@ -180,7 +180,7 @@ func TestReconcile_WithOIDCConnector(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "okta", Namespace: "dex"},
 		Spec: dexv1.DexOIDCConnectorSpec{
 			InstallationRef: dexv1.InstallationRef{Name: inst.Name, Namespace: inst.Namespace},
-			Name:            "Okta",
+			DisplayName:     "Okta",
 			Issuer:          "https://okta.example.com",
 			ClientIDRef:     dexv1.SecretKeyRef{Name: "oidc-creds", Key: "client-id"},
 			ClientSecretRef: dexv1.SecretKeyRef{Name: "oidc-creds", Key: "client-secret"},
@@ -287,7 +287,7 @@ func TestChildReconciler_NamespaceNotAllowed(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "local-conn", Namespace: "forbidden-ns"},
 		Spec: dexv1.DexLocalConnectorSpec{
 			InstallationRef: dexv1.InstallationRef{Name: "test-inst", Namespace: "dex"},
-			Name:            "Local",
+			DisplayName:     "Local",
 		},
 	}
 
@@ -338,7 +338,7 @@ func TestChildReconciler_InstallationNotFound(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "local-conn", Namespace: "iam"},
 		Spec: dexv1.DexLocalConnectorSpec{
 			InstallationRef: dexv1.InstallationRef{Name: "nonexistent", Namespace: "dex"},
-			Name:            "Local",
+			DisplayName:     "Local",
 		},
 	}
 

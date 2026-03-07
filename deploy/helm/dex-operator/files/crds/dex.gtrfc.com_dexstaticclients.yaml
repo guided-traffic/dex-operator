@@ -20,7 +20,7 @@ spec:
     - jsonPath: .spec.installationRef.name
       name: Installation
       type: string
-    - jsonPath: .spec.name
+    - jsonPath: .spec.displayName
       name: Display Name
       type: string
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
@@ -62,6 +62,11 @@ spec:
                 items:
                   type: string
                 type: array
+              displayName:
+                description: |-
+                  DisplayName is the human-readable display name of the client shown on the
+                  Dex approval screen. Optional — if omitted the field is left empty.
+                type: string
               installationRef:
                 description: InstallationRef references the DexInstallation this client
                   belongs to.
@@ -76,9 +81,6 @@ spec:
                 - name
                 - namespace
                 type: object
-              name:
-                description: Name is the human-readable display name of the client.
-                type: string
               public:
                 description: Public marks the client as a public application (no client
                   secret required).

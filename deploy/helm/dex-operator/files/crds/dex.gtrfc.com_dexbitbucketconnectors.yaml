@@ -84,6 +84,10 @@ spec:
                 - key
                 - name
                 type: object
+              displayName:
+                description: DisplayName is the human-readable connector name shown
+                  on the Dex login page.
+                type: string
               id:
                 description: ID is the connector ID used internally by Dex. Defaults
                   to metadata.name.
@@ -102,10 +106,6 @@ spec:
                 - name
                 - namespace
                 type: object
-              name:
-                description: Name is the human-readable connector name shown on the
-                  Dex login page.
-                type: string
               redirectURI:
                 description: |-
                   RedirectURI is the callback URL registered with the Bitbucket OAuth2
@@ -121,8 +121,8 @@ spec:
             required:
             - clientIDRef
             - clientSecretRef
+            - displayName
             - installationRef
-            - name
             type: object
           status:
             description: |-
