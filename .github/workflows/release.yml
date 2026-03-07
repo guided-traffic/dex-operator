@@ -15,7 +15,7 @@ permissions:
   issues: write         # For issue comments
 
 env:
-  GO_VERSION: '1.26.0'
+  GO_VERSION: '1.26.1'
   KUBERNETES_VERSION: '1.33.4'
 
 jobs:
@@ -53,7 +53,7 @@ jobs:
           cat << EOF > kind-config.yaml
           kind: Cluster
           apiVersion: kind.x-k8s.io/v1alpha4
-          name: valkey-operator-test
+          name: dex-operator-test
           nodes:
           - role: control-plane
           # Use native snapshotter to avoid nested overlay issues in DinD
@@ -76,7 +76,7 @@ jobs:
         with:
           version: v0.30.0
           node_image: kindest/node:v${{ env.KUBERNETES_VERSION }}
-          cluster_name: valkey-operator-test
+          cluster_name: dex-operator-test
           wait: 120s
           ignore_failed_clean: true
           config: kind-config.yaml
@@ -88,18 +88,26 @@ jobs:
 
       - name: Build and load operator image
         run: |
-          make docker-build IMG=valkey-operator:test
+          make docker-build IMG=dex-operator:test
           # Import image - containerd will automatically use the native snapshotter from config
           # Don't specify --snapshotter flag to avoid platform unpacking issues
-          docker save valkey-operator:test | docker exec -i valkey-operator-test-control-plane ctr --namespace=k8s.io images import -
+          docker save dex-operator:test | docker exec -i dex-operator-test-control-plane ctr --namespace=k8s.io images import -
+
+      - name: Load kubectl image into Kind cluster
+        run: |
+          # Pre-load the image used by the crd-upgrade pre-install hook Job so
+          # that Kubernetes does not need to pull it from the internet inside the
+          # DinD node (which would time out and fail the helm pre-install hook).
+          docker pull guidedtraffic/kubectl:1.33
+          docker save guidedtraffic/kubectl:1.33 | docker exec -i dex-operator-test-control-plane ctr --namespace=k8s.io images import -
 
       - name: Verify image in cluster
         run: |
           echo "=== Verifying image is available in Kind cluster ==="
-          docker exec valkey-operator-test-control-plane crictl images | grep valkey-operator || {
+          docker exec dex-operator-test-control-plane crictl images | grep dex-operator || {
             echo "ERROR: Image not found in cluster!"
             echo "Available images:"
-            docker exec valkey-operator-test-control-plane crictl images
+            docker exec dex-operator-test-control-plane crictl images
             exit 1
           }
 
@@ -123,11 +131,11 @@ jobs:
         id: helm-install
         continue-on-error: true
         run: |
-          helm install valkey-operator deploy/helm/valkey-operator \
-            --namespace valkey-operator-system \
+          helm install dex-operator deploy/helm/dex-operator \
+            --namespace dex-operator-system \
             --create-namespace \
             --values test/e2e/helm-values.yaml \
-            --set image.repository=valkey-operator \
+            --set image.repository=dex-operator \
             --set image.tag=test \
             --wait \
             --timeout 180s \
@@ -138,43 +146,43 @@ jobs:
         run: |
           echo "=== Helm install failed, collecting diagnostics ==="
           echo "=== Pods in operator namespace ==="
-          kubectl -n valkey-operator-system get pods -o wide || true
+          kubectl -n dex-operator-system get pods -o wide || true
 
           echo ""
           echo "=== Get Pod Names ==="
-          POD_NAME=$(kubectl -n valkey-operator-system get pods -l app.kubernetes.io/name=valkey-operator -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          POD_NAME=$(kubectl -n dex-operator-system get pods -l app.kubernetes.io/name=dex-operator -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
           echo "Pod name: ${POD_NAME}"
 
           if [ -n "$POD_NAME" ]; then
             echo ""
             echo "=== Operator logs (current attempt) ==="
-            kubectl -n valkey-operator-system logs "$POD_NAME" --tail=100 2>&1 || echo "No current logs available"
+            kubectl -n dex-operator-system logs "$POD_NAME" --tail=100 2>&1 || echo "No current logs available"
 
             echo ""
             echo "=== Operator logs (previous crash) ==="
-            kubectl -n valkey-operator-system logs "$POD_NAME" --previous --tail=100 2>&1 || echo "No previous logs available"
+            kubectl -n dex-operator-system logs "$POD_NAME" --previous --tail=100 2>&1 || echo "No previous logs available"
           fi
 
           echo ""
           echo "=== Describe pods ==="
-          kubectl -n valkey-operator-system describe pods || true
+          kubectl -n dex-operator-system describe pods || true
 
           echo ""
           echo "=== Events ==="
-          kubectl -n valkey-operator-system get events --sort-by='.lastTimestamp' || true
+          kubectl -n dex-operator-system get events --sort-by='.lastTimestamp' || true
 
           echo ""
           echo "=== ConfigMap content ==="
-          kubectl -n valkey-operator-system get configmap -l app.kubernetes.io/name=valkey-operator -o yaml || true
+          kubectl -n dex-operator-system get configmap -l app.kubernetes.io/name=dex-operator -o yaml || true
 
           echo ""
           echo "=== ServiceAccount ==="
-          kubectl -n valkey-operator-system get serviceaccount valkey-operator -o yaml || true
+          kubectl -n dex-operator-system get serviceaccount dex-operator -o yaml || true
 
           echo ""
           echo "=== RBAC ==="
-          kubectl get clusterrolebinding | grep valkey-operator || true
-          kubectl describe clusterrolebinding valkey-operator || true
+          kubectl get clusterrolebinding | grep dex-operator || true
+          kubectl describe clusterrolebinding dex-operator || true
 
           exit 1
 
@@ -190,7 +198,7 @@ jobs:
           kubectl apply -f test/e2e/testdata/cert-manager-issuer.yaml
 
       - name: Wait for operator
-        run: kubectl -n valkey-operator-system wait --for=condition=available --timeout=120s deployment/valkey-operator
+        run: kubectl -n dex-operator-system wait --for=condition=available --timeout=120s deployment/dex-operator
 
       - name: Run E2E tests
         run: make test-e2e
@@ -201,15 +209,15 @@ jobs:
         if: failure()
         run: |
           echo "=== Operator logs ==="
-          kubectl -n valkey-operator-system logs -l app.kubernetes.io/name=valkey-operator --tail=100 || true
+          kubectl -n dex-operator-system logs -l app.kubernetes.io/name=dex-operator --tail=100 || true
           echo "=== Describe pods ==="
-          kubectl -n valkey-operator-system describe pods || true
+          kubectl -n dex-operator-system describe pods || true
           echo "=== Events ==="
-          kubectl -n valkey-operator-system get events --sort-by='.lastTimestamp' || true
+          kubectl -n dex-operator-system get events --sort-by='.lastTimestamp' || true
 
       - name: Cleanup Kind cluster
         if: always()
-        run: kind delete cluster --name valkey-operator-test || true
+        run: kind delete cluster --name dex-operator-test || true
 
   linter:
     name: Code Linting
@@ -672,12 +680,12 @@ jobs:
           platforms: linux/amd64
           push: false
           load: true
-          tags: valkey-operator:scan-${{ github.sha }}
+          tags: dex-operator:scan-${{ github.sha }}
 
       - name: Run Trivy vulnerability scan
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: valkey-operator:scan-${{ github.sha }}
+          image-ref: dex-operator:scan-${{ github.sha }}
           format: 'table'
           exit-code: '1'
           ignore-unfixed: true
@@ -689,7 +697,7 @@ jobs:
         if: always()
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: valkey-operator:scan-${{ github.sha }}
+          image-ref: dex-operator:scan-${{ github.sha }}
           format: 'sarif'
           output: 'trivy-results.sarif'
           scanners: 'vuln,secret,misconfig'
@@ -704,7 +712,7 @@ jobs:
 
       - name: Cleanup scan image
         if: always()
-        run: docker rmi valkey-operator:scan-${{ github.sha }} || true
+        run: docker rmi dex-operator:scan-${{ github.sha }} || true
 
   semantic-release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

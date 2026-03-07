@@ -1,0 +1,80 @@
+# Default values for dex-operator.
+
+replicaCount: 1
+
+image:
+  repository: guidedtraffic/dex-operator
+  # Overrides the image tag whose default is the chart appVersion
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# Additional labels to add to the operator Pod
+podLabels: {}
+
+# Additional annotations to add to the operator Pod
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 128Mi
+  requests:
+    cpu: 10m
+    memory: 64Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Controller manager arguments
+leaderElect: true
+healthProbeBindAddress: ":8081"
+
+# CRD upgrade job configuration
+# A pre-upgrade hook Job is created that applies all CRDs using kubectl.
+crdUpgradeJob:
+  image:
+    repository: guidedtraffic/kubectl
+    tag: "1.33"
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 100m
+      memory: 64Mi
+    requests:
+      cpu: 10m
+      memory: 32Mi
+  # Annotations for the upgrade job pod
+  podAnnotations: {}
+  # Additional pod labels for the upgrade job pod
+  podLabels: {}
+  # Node selector for the upgrade job pod
+  nodeSelector: {}
+  tolerations: []

@@ -1,0 +1,84 @@
+{{/*
+Pre-install / pre-upgrade hook Job.
+Applies all CRD manifests from the crd-configmap ConfigMap using kubectl.
+Runs before any other chart resources are created or updated, ensuring CRDs
+are always in sync with the operator version being deployed.
+*/}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "dex-operator.fullname" . }}-crd-upgrade-{{ .Release.Revision }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dex-operator.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        {{- include "dex-operator.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: crd-upgrade
+        {{- with .Values.crdUpgradeJob.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.crdUpgradeJob.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "dex-operator.fullname" . }}-crd-upgrade
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.crdUpgradeJob.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.crdUpgradeJob.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: crd-upgrade
+          image: "{{ .Values.crdUpgradeJob.image.repository }}:{{ .Values.crdUpgradeJob.image.tag }}"
+          imagePullPolicy: {{ .Values.crdUpgradeJob.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "Applying CRDs from /crds/ ..."
+              for f in /crds/*.yaml; do
+                echo "  → $f"
+                kubectl apply --server-side --force-conflicts -f "$f"
+              done
+              echo "CRD upgrade complete."
+          volumeMounts:
+            - name: crds
+              mountPath: /crds
+              readOnly: true
+          {{- with .Values.crdUpgradeJob.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: crds
+          configMap:
+            name: {{ include "dex-operator.fullname" . }}-crds

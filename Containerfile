@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.26.0-alpine AS builder
+FROM golang:1.26.1-alpine AS builder
 
 # Build arguments for metadata
 ARG BUILD_NUMBER
@@ -40,12 +40,12 @@ ARG GIT_COMMIT
 ARG BUILD_TIME
 
 # Add OCI labels for better metadata
-LABEL org.opencontainers.image.title="Valkey Operator" \
-      org.opencontainers.image.description="A Kubernetes operator for managing Valkey and Sentinel instances" \
+LABEL org.opencontainers.image.title="Dex Operator" \
+      org.opencontainers.image.description="A Kubernetes operator for dynamically provisioning Dex configuration from Custom Resources" \
       org.opencontainers.image.vendor="Guided Traffic" \
       org.opencontainers.image.licenses="Apache-2.0" \
-      org.opencontainers.image.documentation="https://github.com/guided-traffic/valkey-operator" \
-      org.opencontainers.image.source="https://github.com/guided-traffic/valkey-operator" \
+      org.opencontainers.image.documentation="https://github.com/guided-traffic/dex-operator" \
+      org.opencontainers.image.source="https://github.com/guided-traffic/dex-operator" \
       org.opencontainers.image.version="${BUILD_NUMBER:-dev}" \
       org.opencontainers.image.revision="${GIT_COMMIT:-unknown}" \
       org.opencontainers.image.created="${BUILD_TIME:-0}"

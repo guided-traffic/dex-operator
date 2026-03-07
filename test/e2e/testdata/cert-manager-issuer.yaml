@@ -1,0 +1,8 @@
+# Self-signed ClusterIssuer for cert-manager.
+# Applied by the Makefile cert-manager-install target.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-cluster-issuer
+spec:
+  selfSigned: {}

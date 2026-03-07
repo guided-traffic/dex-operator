@@ -31,18 +31,18 @@ This release is available as Docker images:
 
 ```bash
 # Latest version
-docker pull guidedtraffic/valkey-operator:latest
+docker pull guidedtraffic/dex-operator:latest
 
 # Specific version
-docker pull guidedtraffic/valkey-operator:{{version}}
+docker pull guidedtraffic/dex-operator:{{version}}
 ```
 
 ## ⎈ Helm Chart
 
 ```bash
-helm repo add valkey-operator https://guided-traffic.github.io/valkey-operator/
+helm repo add dex-operator https://guided-traffic.github.io/dex-operator/
 helm repo update
-helm install valkey-operator valkey-operator/valkey-operator --version {{version}}
+helm install dex-operator dex-operator/dex-operator --version {{version}}
 ```
 
 {{> footer}}
