@@ -3,7 +3,7 @@
 Ein Kubernetes Operator (Go 1.26, controller-runtime) der die Konfiguration von Dex dynamisch aus Custom Resources zusammenbaut.
 Dex wird weiterhin über das offizielle Dex Helm Chart installiert. Der Operator erzeugt zwei Secrets im Namespace der Dex-Installation:
 1. **Config-Secret** — Enthält die vollständige Dex-Konfiguration als YAML (Issuer, Storage, Web, CORS, gRPC, Logger, Expiry, Connectors, Static Clients)
-2. **Env-Secret** — Enthält alle Client-Secrets als Env-Variablen (z.B. `GRAFANA_CLIENT_SECRET`), wird per `envFrom` an den Dex-Container gehängt und in der Config per `$ENV_VAR` referenziert
+2. **Env-Secret** — Enthält alle Client-Secrets als Env-Variablen (z.B. `GRAFANA_CLIENT_SECRET`), wird per `envFrom` an den Dex-Container gehängt und in der Config per `secretEnv` referenziert
 
 ## API Group
 `dex.gtrfc.com/v1`
@@ -68,62 +68,3 @@ File-path-only certs (SAML `ca`, client TLS, service accounts) are added to `Mou
 - if you need to write temporary files, write them to local tmp-folder. Do not use the system tmp folder at /tmp
 - persist important information about the project and implementation in this file
 - if you are done with your task, always report a conventional commit message to the user, but do not commit to git. Let the user review and commit to git. This ensures that the user is aware of all changes and can provide feedback before they are finalized.
-
----
-
-## Projektplan
-
-### Phase 1: Projekt-Setup
-- [x] Go-Modul initialisieren (`go mod init github.com/guided-traffic/dex-operator`)
-- [x] Kubebuilder-Projektstruktur anlegen (cmd/, internal/, api/, config/)
-- [x] Boilerplate-Dateien (hack/boilerplate.go.txt, main.go)
-- [x] Kopierte CI-Dateien anpassen (Makefile, package.json, Containerfile, workflows, .releaserc.json, renovate.json — valkey-operator → dex-operator)
-- [x] README.md aktualisieren
-
-### Phase 2: CRD-Typen definieren (api/v1/)
-- [x] DexInstallation types + deepcopy
-- [x] DexStaticClient types + deepcopy
-- [x] DexLDAPConnector types
-- [x] DexGitHubConnector types
-- [x] DexSAMLConnector types
-- [x] DexGitLabConnector types
-- [x] DexOIDCConnector types
-- [x] DexOAuth2Connector types
-- [x] DexGoogleConnector types
-- [x] DexLinkedInConnector types
-- [x] DexMicrosoftConnector types
-- [x] DexAuthProxyConnector types
-- [x] DexBitbucketConnector types
-- [x] DexLocalConnector types (BuiltIn)
-- [x] DexOpenShiftConnector types
-- [x] DexAtlassianCrowdConnector types
-- [x] DexGiteaConnector types
-- [x] DexKeystoneConnector types
-- [x] Gemeinsame Typen: InstallationRef, SecretKeyRef, Status-Conditions
-- [x] CRD-Manifeste generieren (`make manifests`)
-
-### Phase 3: Config Builder
-- [x] Dex Config YAML Struct (interne Repräsentation, nicht CRD) → `internal/builder/config_types.go`
-- [x] Config-Builder: DexInstallation + Connectors + Clients → Dex YAML → `internal/builder/builder.go`, `connectors.go`, `connectors_oauth.go`, `clients.go`, `storage.go`
-- [x] Env-Secret-Builder: Client-Secrets aus referenzierten Secrets sammeln → Env-Secret Map (in `Build` via `SecretResolver`)
-- [x] Unit-Tests für Config-Builder → `internal/builder/builder_test.go`
-
-### Phase 4: Controller
-- [x] DexInstallation Controller (Reconciler): Config + Env Secret schreiben
-- [x] DexStaticClient Controller: DexInstallation re-reconcile triggern
-- [x] Connector Controller (generisch oder pro Typ): DexInstallation re-reconcile triggern
-- [x] Namespace-Whitelist-Validierung
-- [x] Optionaler Rollout-Restart Logik
-- [x] RBAC-Konfiguration (Secrets lesen/schreiben, Deployments patchen)
-- [x] Unit-Tests für Controller
-
-### Phase 5: Integration & E2E Tests
-- [x] Integration-Tests mit envtest (`test/integration/` — 14 Tests: Installation, Connector, StaticClient)
-- [x] E2E-Tests mit Kind-Cluster (`test/e2e/` — 5 Tests: Lifecycle, Namespace-Isolation, StaticClient)
-- [x] E2E-Testdata (`test/e2e/helm-values.yaml`)
-- [ ] CI-Pipeline testen (build, lint, test, release)
-
-### Phase 6: Dokumentation & Helm
-- [x] Operator Helm Chart (deploy/helm/dex-operator)
-- [x] CRD-Sync in Helm Chart (`make helm-sync-crds`, called automatically by `make manifests`)
-- [ ] README mit Architektur, Quickstart, Beispielen

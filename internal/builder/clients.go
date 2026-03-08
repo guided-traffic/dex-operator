@@ -26,16 +26,17 @@ import (
 // buildStaticClients converts each DexStaticClient into a Dex StaticClient
 // config entry.  The client-id is resolved from the referenced Secret and
 // embedded directly; the client-secret is stored in envs and referenced via
-// a $ENV_VAR substitution string.
+// the secretEnv field (bare env var name, no $-prefix).
 func buildStaticClients(
 	ctx context.Context,
 	clients []dexv1.DexStaticClient,
 	sr SecretResolver,
 	envs map[string][]byte,
 ) ([]StaticClient, error) {
+	usedEnvKeys := make(map[string]string, len(clients)) // envKey → resource name
 	result := make([]StaticClient, 0, len(clients))
 	for i := range clients {
-		sc, err := buildOneStaticClient(ctx, &clients[i], sr, envs)
+		sc, err := buildOneStaticClient(ctx, &clients[i], sr, envs, usedEnvKeys)
 		if err != nil {
 			return nil, fmt.Errorf("static client %q: %w", clients[i].Name, err)
 		}
@@ -49,6 +50,7 @@ func buildOneStaticClient(
 	c *dexv1.DexStaticClient,
 	sr SecretResolver,
 	envs map[string][]byte,
+	usedEnvKeys map[string]string,
 ) (StaticClient, error) {
 	// Default key names defined by kubebuilder defaults on the CRD.
 	clientIDKey := c.Spec.SecretRef.ClientIDKey
@@ -69,20 +71,31 @@ func buildOneStaticClient(
 		return StaticClient{}, fmt.Errorf("client-id: %w", err)
 	}
 
-	// Resolve the client-secret into the env Secret so the container can pick
-	// it up via envFrom; reference it with $VAR in the config YAML.
+	// Build the env var key and check for collisions.
 	csEnvKey := clientEnvKey(c.Name, "CLIENT_SECRET")
-	csRef, err := resolveEnvSecret(ctx, c.Namespace, dexv1.SecretKeyRef{
+	resourceFQN := c.Namespace + "/" + c.Name
+	if prev, ok := usedEnvKeys[csEnvKey]; ok {
+		return StaticClient{}, fmt.Errorf(
+			"env var name collision: %q is already used by %q (current: %q)",
+			csEnvKey, prev, resourceFQN,
+		)
+	}
+	usedEnvKeys[csEnvKey] = resourceFQN
+
+	// Resolve the client-secret into the env Secret; reference it via
+	// the secretEnv field (bare env var name, no $-prefix).
+	csVal, err := resolveSecret(ctx, c.Namespace, dexv1.SecretKeyRef{
 		Name: c.Spec.SecretRef.Name,
 		Key:  clientSecretKey,
-	}, csEnvKey, sr, envs)
+	}, sr)
 	if err != nil {
 		return StaticClient{}, fmt.Errorf("client-secret: %w", err)
 	}
+	envs[csEnvKey] = []byte(csVal)
 
 	sc := StaticClient{
 		ID:           clientID,
-		Secret:       csRef,
+		SecretEnv:    csEnvKey,
 		Name:         c.Spec.DisplayName,
 		RedirectURIs: c.Spec.RedirectURIs,
 		Public:       c.Spec.Public,
