@@ -424,8 +424,8 @@ func TestBuild_StaticClient(t *testing.T) {
 	if sc["id"] != "grafana" {
 		t.Errorf("staticClient id = %v, want grafana", sc["id"])
 	}
-	if sc["secret"] != "$GRAFANA_CLIENT_SECRET" {
-		t.Errorf("staticClient secret = %v, want $GRAFANA_CLIENT_SECRET", sc["secret"])
+	if sc["secretEnv"] != "GRAFANA_CLIENT_SECRET" {
+		t.Errorf("staticClient secretEnv = %v, want GRAFANA_CLIENT_SECRET", sc["secretEnv"])
 	}
 	if sc["name"] != "Grafana" {
 		t.Errorf("staticClient name = %v, want Grafana", sc["name"])
@@ -641,4 +641,132 @@ func TestConnectorID_Fallback(t *testing.T) {
 	if got := builder.ExportedConnectorID("meta-name", "spec-id"); got != "spec-id" {
 		t.Errorf("connectorID spec = %q, want spec-id", got)
 	}
+}
+
+// ── Build: static client env var collision ────────────────────────────────────
+
+func TestBuild_StaticClient_EnvVarCollision(t *testing.T) {
+	inst := minimalInstallation("ns")
+
+	// Two clients whose resource names sanitize to the same env var key:
+	// "grafana" and "GRAFANA" both produce GRAFANA_CLIENT_SECRET.
+	clients := []dexv1.DexStaticClient{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "grafana", Namespace: "ns"},
+			Spec: dexv1.DexStaticClientSpec{
+				InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
+				SecretRef: dexv1.StaticClientSecretRef{
+					Name: "grafana-oidc",
+				},
+				DisplayName:  "Grafana",
+				RedirectURIs: []string{"https://grafana.example.com/callback"},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "GRAFANA", Namespace: "ns"},
+			Spec: dexv1.DexStaticClientSpec{
+				InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
+				SecretRef: dexv1.StaticClientSecretRef{
+					Name: "grafana-oidc-2",
+				},
+				DisplayName:  "Grafana Duplicate",
+				RedirectURIs: []string{"https://grafana2.example.com/callback"},
+			},
+		},
+	}
+
+	secrets := map[string]string{
+		"ns/grafana-oidc[client-id]":       "grafana-id",
+		"ns/grafana-oidc[client-secret]":   "secret1",
+		"ns/grafana-oidc-2[client-id]":     "grafana-id-2",
+		"ns/grafana-oidc-2[client-secret]": "secret2",
+	}
+
+	_, err := builder.Build(context.Background(), builder.Input{
+		Installation:  inst,
+		StaticClients: clients,
+		Secrets:       mockResolver(secrets),
+	})
+	if err == nil {
+		t.Fatal("expected collision error, got nil")
+	}
+
+	if !contains(err.Error(), "env var name collision") {
+		t.Errorf("error should mention collision, got: %v", err)
+	}
+	if !contains(err.Error(), "GRAFANA_CLIENT_SECRET") {
+		t.Errorf("error should mention the env var name, got: %v", err)
+	}
+}
+
+// ── Build: static client with different names, no collision ───────────────────
+
+func TestBuild_StaticClient_NoCollision(t *testing.T) {
+	inst := minimalInstallation("ns")
+
+	clients := []dexv1.DexStaticClient{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "grafana", Namespace: "ns"},
+			Spec: dexv1.DexStaticClientSpec{
+				InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
+				SecretRef:       dexv1.StaticClientSecretRef{Name: "grafana-oidc"},
+				DisplayName:     "Grafana",
+				RedirectURIs:    []string{"https://grafana.example.com/callback"},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "argocd", Namespace: "ns"},
+			Spec: dexv1.DexStaticClientSpec{
+				InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
+				SecretRef:       dexv1.StaticClientSecretRef{Name: "argocd-oidc"},
+				DisplayName:     "ArgoCD",
+				RedirectURIs:    []string{"https://argocd.example.com/callback"},
+			},
+		},
+	}
+
+	secrets := map[string]string{
+		"ns/grafana-oidc[client-id]":     "grafana-id",
+		"ns/grafana-oidc[client-secret]": "secret1",
+		"ns/argocd-oidc[client-id]":      "argocd-id",
+		"ns/argocd-oidc[client-secret]":  "secret2",
+	}
+
+	out, err := builder.Build(context.Background(), builder.Input{
+		Installation:  inst,
+		StaticClients: clients,
+		Secrets:       mockResolver(secrets),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	m := parseYAML(t, out.ConfigYAML)
+	scs := m["staticClients"].([]any)
+	if len(scs) != 2 {
+		t.Fatalf("expected 2 static clients, got %d", len(scs))
+	}
+
+	sc0 := scs[0].(map[string]any)
+	sc1 := scs[1].(map[string]any)
+
+	if sc0["secretEnv"] != "GRAFANA_CLIENT_SECRET" {
+		t.Errorf("client 0 secretEnv = %v, want GRAFANA_CLIENT_SECRET", sc0["secretEnv"])
+	}
+	if sc1["secretEnv"] != "ARGOCD_CLIENT_SECRET" {
+		t.Errorf("client 1 secretEnv = %v, want ARGOCD_CLIENT_SECRET", sc1["secretEnv"])
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsAt(s, substr))
+}
+
+func containsAt(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

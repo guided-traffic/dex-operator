@@ -5,7 +5,7 @@ A Kubernetes Operator (Go, controller-runtime) that dynamically assembles [Dex](
 Dex is installed separately via the official [Dex Helm Chart](https://github.com/dexidp/helm-charts). The operator watches for Custom Resources and generates two Secrets in the Dex namespace:
 
 - **Config-Secret** — Full Dex configuration as YAML (Issuer, Storage, Web, CORS, gRPC, Logger, Expiry, Connectors, Static Clients)
-- **Env-Secret** — All client secrets as environment variables (e.g. `GRAFANA_CLIENT_SECRET`), attached to the Dex container via `envFrom` and referenced in the config as `$ENV_VAR`
+- **Env-Secret** — All client secrets as environment variables (e.g. `GRAFANA_CLIENT_SECRET`), attached to the Dex container via `envFrom` and referenced in the config via `secretEnv`
 
 ## Installation
 
