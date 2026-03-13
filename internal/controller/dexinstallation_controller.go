@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -49,11 +50,14 @@ func (r *DexInstallationReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	previousStatus := installation.Status.DeepCopy()
 	result, reconcileErr := r.reconcileInstallation(ctx, &installation)
 
 	setReadyCondition(&installation.Status.CommonStatus, installation.Generation, reconcileErr)
-	if statusErr := r.Status().Update(ctx, &installation); statusErr != nil {
-		logger.Error(statusErr, "failed to update DexInstallation status")
+	if !reflect.DeepEqual(previousStatus, &installation.Status) {
+		if statusErr := r.Status().Update(ctx, &installation); statusErr != nil {
+			logger.Error(statusErr, "failed to update DexInstallation status")
+		}
 	}
 
 	return result, reconcileErr
