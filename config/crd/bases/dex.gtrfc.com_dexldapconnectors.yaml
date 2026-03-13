@@ -114,12 +114,6 @@ spec:
                     description: Filter is an optional LDAP filter applied to group
                       entries.
                     type: string
-                  groupAttr:
-                    default: member
-                    description: |-
-                      GroupAttr is the attribute on the group entry that is matched against
-                      UserAttr.
-                    type: string
                   nameAttr:
                     default: cn
                     description: NameAttr is the LDAP attribute for the group name
@@ -132,14 +126,43 @@ spec:
                     - sub
                     - one
                     type: string
-                  userAttr:
-                    default: DN
+                  userMatchers:
                     description: |-
-                      UserAttr is the attribute on the user entry that is matched against
-                      GroupAttr.
-                    type: string
+                      UserMatchers defines one or more user-to-group attribute pairs.
+                      Dex requires at least one matcher to correlate users with groups.
+                      Multiple matchers allow supporting schemas where different group types
+                      (e.g. posixGroup and groupOfNames) store membership under different
+                      attribute names.
+                    items:
+                      description: |-
+                        LDAPUserMatcher defines a single user-to-group attribute mapping used by
+                        groupSearch. Multiple matchers allow Dex to handle schemas where different
+                        group types store membership under different attribute names.
+                      properties:
+                        groupAttr:
+                          description: GroupAttr is the attribute on the group entry
+                            that holds member references.
+                          type: string
+                        recursionGroupAttr:
+                          description: |-
+                            RecursionGroupAttr enables recursive group lookup.
+                            When set, Dex follows this attribute on matched groups to locate parent
+                            groups, resolving nested memberships. Dex includes cycle detection.
+                          type: string
+                        userAttr:
+                          description: |-
+                            UserAttr is the attribute on the user entry to compare against GroupAttr.
+                            Use "DN" to match against the full distinguished name.
+                          type: string
+                      required:
+                      - groupAttr
+                      - userAttr
+                      type: object
+                    minItems: 1
+                    type: array
                 required:
                 - baseDN
+                - userMatchers
                 type: object
               host:
                 description: Host is the LDAP host in the format host:port.

@@ -269,6 +269,159 @@ func TestBuild_LDAPConnector(t *testing.T) {
 	}
 }
 
+// ── Build: LDAP connector with groupSearch/userMatchers ───────────────────────
+
+func TestBuild_LDAPConnector_GroupSearch(t *testing.T) {
+	inst := minimalInstallation("ns")
+
+	connectors := builder.ConnectorSet{
+		LDAP: []dexv1.DexLDAPConnector{
+			{
+				ObjectMeta: metav1.ObjectMeta{Name: "ad", Namespace: "ns"},
+				Spec: dexv1.DexLDAPConnectorSpec{
+					InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
+					DisplayName:     "Active Directory",
+					Host:            "ad.example.com:636",
+					UserSearch: dexv1.LDAPUserSearch{
+						BaseDN:    "cn=Users,dc=example,dc=com",
+						Username:  "userPrincipalName",
+						IDAttr:    "DN",
+						EmailAttr: "userPrincipalName",
+					},
+					GroupSearch: &dexv1.LDAPGroupSearch{
+						BaseDN: "cn=Groups,dc=example,dc=com",
+						Filter: "(objectClass=group)",
+						UserMatchers: []dexv1.LDAPUserMatcher{
+							{UserAttr: "DN", GroupAttr: "member"},
+						},
+						NameAttr: "cn",
+					},
+				},
+			},
+		},
+	}
+
+	out, err := builder.Build(context.Background(), builder.Input{
+		Installation: inst,
+		Connectors:   connectors,
+		Secrets:      mockResolver(nil),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	m := parseYAML(t, out.ConfigYAML)
+	conns := m["connectors"].([]any)
+	conn := conns[0].(map[string]any)
+	cfg := conn["config"].(map[string]any)
+
+	gs, ok := cfg["groupSearch"].(map[string]any)
+	if !ok {
+		t.Fatalf("groupSearch missing or wrong type: %T", cfg["groupSearch"])
+	}
+	if gs["baseDN"] != "cn=Groups,dc=example,dc=com" {
+		t.Errorf("groupSearch.baseDN = %v", gs["baseDN"])
+	}
+	if gs["filter"] != "(objectClass=group)" {
+		t.Errorf("groupSearch.filter = %v", gs["filter"])
+	}
+	if gs["nameAttr"] != "cn" {
+		t.Errorf("groupSearch.nameAttr = %v", gs["nameAttr"])
+	}
+	matchers, ok := gs["userMatchers"].([]any)
+	if !ok || len(matchers) != 1 {
+		t.Fatalf("userMatchers = %v, want 1 entry", gs["userMatchers"])
+	}
+	m0 := matchers[0].(map[string]any)
+	if m0["userAttr"] != "DN" {
+		t.Errorf("userMatchers[0].userAttr = %v, want DN", m0["userAttr"])
+	}
+	if m0["groupAttr"] != "member" {
+		t.Errorf("userMatchers[0].groupAttr = %v, want member", m0["groupAttr"])
+	}
+	if _, exists := m0["recursionGroupAttr"]; exists {
+		t.Errorf("recursionGroupAttr should be absent when not set")
+	}
+
+	// Old flat fields must NOT appear in the output.
+	if _, exists := gs["userAttr"]; exists {
+		t.Errorf("flat userAttr must not appear in groupSearch output")
+	}
+	if _, exists := gs["groupAttr"]; exists {
+		t.Errorf("flat groupAttr must not appear in groupSearch output")
+	}
+}
+
+// TestBuild_LDAPConnector_GroupSearch_MultiMatcher verifies that multiple
+// userMatchers (e.g. for posixGroup + groupOfNames schemas) and
+// recursionGroupAttr are rendered correctly.
+func TestBuild_LDAPConnector_GroupSearch_MultiMatcher(t *testing.T) {
+	inst := minimalInstallation("ns")
+
+	connectors := builder.ConnectorSet{
+		LDAP: []dexv1.DexLDAPConnector{
+			{
+				ObjectMeta: metav1.ObjectMeta{Name: "freeipa", Namespace: "ns"},
+				Spec: dexv1.DexLDAPConnectorSpec{
+					InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
+					DisplayName:     "FreeIPA",
+					Host:            "freeipa.example.com:636",
+					UserSearch: dexv1.LDAPUserSearch{
+						BaseDN:    "cn=users,dc=example,dc=com",
+						Username:  "uid",
+						IDAttr:    "uid",
+						EmailAttr: "mail",
+					},
+					GroupSearch: &dexv1.LDAPGroupSearch{
+						BaseDN: "cn=groups,dc=example,dc=com",
+						Filter: "(|(objectClass=posixGroup)(objectClass=group))",
+						UserMatchers: []dexv1.LDAPUserMatcher{
+							{UserAttr: "uid", GroupAttr: "memberUid"},
+							{UserAttr: "DN", GroupAttr: "member", RecursionGroupAttr: "member"},
+						},
+						NameAttr: "name",
+					},
+				},
+			},
+		},
+	}
+
+	out, err := builder.Build(context.Background(), builder.Input{
+		Installation: inst,
+		Connectors:   connectors,
+		Secrets:      mockResolver(nil),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	m := parseYAML(t, out.ConfigYAML)
+	conns := m["connectors"].([]any)
+	cfg := conns[0].(map[string]any)["config"].(map[string]any)
+	gs := cfg["groupSearch"].(map[string]any)
+
+	matchers, ok := gs["userMatchers"].([]any)
+	if !ok || len(matchers) != 2 {
+		t.Fatalf("userMatchers = %v, want 2 entries", gs["userMatchers"])
+	}
+
+	m0 := matchers[0].(map[string]any)
+	if m0["userAttr"] != "uid" || m0["groupAttr"] != "memberUid" {
+		t.Errorf("matchers[0] = %v", m0)
+	}
+	if _, exists := m0["recursionGroupAttr"]; exists {
+		t.Errorf("matchers[0].recursionGroupAttr should be absent")
+	}
+
+	m1 := matchers[1].(map[string]any)
+	if m1["userAttr"] != "DN" || m1["groupAttr"] != "member" {
+		t.Errorf("matchers[1] = %v", m1)
+	}
+	if m1["recursionGroupAttr"] != "member" {
+		t.Errorf("matchers[1].recursionGroupAttr = %v, want member", m1["recursionGroupAttr"])
+	}
+}
+
 // ── Build: OIDC connector ─────────────────────────────────────────────────────
 
 func TestBuild_OIDCConnector(t *testing.T) {

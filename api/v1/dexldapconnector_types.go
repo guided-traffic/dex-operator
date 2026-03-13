@@ -124,6 +124,26 @@ type LDAPUserSearch struct {
 	EmailSuffix string `json:"emailSuffix,omitempty"`
 }
 
+// LDAPUserMatcher defines a single user-to-group attribute mapping used by
+// groupSearch. Multiple matchers allow Dex to handle schemas where different
+// group types store membership under different attribute names.
+type LDAPUserMatcher struct {
+	// UserAttr is the attribute on the user entry to compare against GroupAttr.
+	// Use "DN" to match against the full distinguished name.
+	// +kubebuilder:validation:Required
+	UserAttr string `json:"userAttr"`
+
+	// GroupAttr is the attribute on the group entry that holds member references.
+	// +kubebuilder:validation:Required
+	GroupAttr string `json:"groupAttr"`
+
+	// RecursionGroupAttr enables recursive group lookup.
+	// When set, Dex follows this attribute on matched groups to locate parent
+	// groups, resolving nested memberships. Dex includes cycle detection.
+	// +optional
+	RecursionGroupAttr string `json:"recursionGroupAttr,omitempty"`
+}
+
 // LDAPGroupSearch defines how groups are searched in the LDAP directory.
 type LDAPGroupSearch struct {
 	// BaseDN is the base distinguished name for group searches.
@@ -139,17 +159,14 @@ type LDAPGroupSearch struct {
 	// +optional
 	Scope string `json:"scope,omitempty"`
 
-	// UserAttr is the attribute on the user entry that is matched against
-	// GroupAttr.
-	// +kubebuilder:default=DN
-	// +optional
-	UserAttr string `json:"userAttr,omitempty"`
-
-	// GroupAttr is the attribute on the group entry that is matched against
-	// UserAttr.
-	// +kubebuilder:default=member
-	// +optional
-	GroupAttr string `json:"groupAttr,omitempty"`
+	// UserMatchers defines one or more user-to-group attribute pairs.
+	// Dex requires at least one matcher to correlate users with groups.
+	// Multiple matchers allow supporting schemas where different group types
+	// (e.g. posixGroup and groupOfNames) store membership under different
+	// attribute names.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems=1
+	UserMatchers []LDAPUserMatcher `json:"userMatchers"`
 
 	// NameAttr is the LDAP attribute for the group name claim.
 	// +kubebuilder:default=cn
