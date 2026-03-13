@@ -21,33 +21,21 @@ Dex is installed separately via the [official Helm Chart](https://github.com/dex
 The following Helm values show the required changes:
 
 ```yaml
-# Disable the default config — the operator manages it.
-config: {}
-
-# Mount the operator-generated config secret as the Dex config file.
-volumes:
-  - name: dex-config
-    secret:
-      secretName: dex-config           # must match DexInstallation .spec.configSecretName
-
-volumeMounts:
-  - name: dex-config
-    mountPath: /etc/dex/cfg
-    readOnly: true
-
-# Tell Dex to use the mounted config file.
-envVars:
-  - name: DEX_CONFIG
-    value: /etc/dex/cfg/config.yaml
+# Tell the Dex chart to use an existing config secret managed by the operator
+# instead of creating its own. The name must match DexInstallation .spec.configSecretName.
+configSecret:
+  create: false
+  name: "dex-config"
 
 # Inject all client/connector secrets as environment variables.
 # The operator writes them to this secret; the config references them as $VAR.
+# The name must match DexInstallation .spec.envSecretName.
 envFrom:
   - secretRef:
-      name: dex-env                    # must match DexInstallation .spec.envSecretName
+      name: dex-env
 ```
 
-> **Note:** The `secretName` values (`dex-config` / `dex-env`) must match the `configSecretName` and `envSecretName` fields in the `DexInstallation` resource.
+> **Note:** The secret names (`dex-config` / `dex-env`) must match the `configSecretName` and `envSecretName` fields in the `DexInstallation` resource. With this setup the operator writes both secrets and any change is picked up live by the Dex deployment (or triggers a rollout restart when `rolloutRestart.enabled: true` is set on the `DexInstallation`).
 
 ```bash
 helm repo add dex https://charts.dexidp.io

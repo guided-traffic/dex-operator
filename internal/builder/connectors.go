@@ -193,12 +193,18 @@ func buildLDAPGroupSearch(s dexv1.LDAPGroupSearch) map[string]any {
 	if s.Scope != "" {
 		cfg["scope"] = s.Scope
 	}
-	if s.UserAttr != "" {
-		cfg["userAttr"] = s.UserAttr
+	matchers := make([]map[string]any, 0, len(s.UserMatchers))
+	for _, m := range s.UserMatchers {
+		entry := map[string]any{
+			"userAttr":  m.UserAttr,
+			"groupAttr": m.GroupAttr,
+		}
+		if m.RecursionGroupAttr != "" {
+			entry["recursionGroupAttr"] = m.RecursionGroupAttr
+		}
+		matchers = append(matchers, entry)
 	}
-	if s.GroupAttr != "" {
-		cfg["groupAttr"] = s.GroupAttr
-	}
+	cfg["userMatchers"] = matchers
 	if s.NameAttr != "" {
 		cfg["nameAttr"] = s.NameAttr
 	}
