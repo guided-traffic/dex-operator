@@ -98,8 +98,13 @@ jobs:
           # Pre-load the image used by the crd-upgrade pre-install hook Job so
           # that Kubernetes does not need to pull it from the internet inside the
           # DinD node (which would time out and fail the helm pre-install hook).
-          docker pull guidedtraffic/kubectl:1.33
-          docker save guidedtraffic/kubectl:1.33 | docker exec -i dex-operator-test-control-plane ctr --namespace=k8s.io images import -
+          # Derive image from Helm values.yaml so Renovate tag bumps propagate automatically.
+          KUBECTL_REPO=$(grep -A 5 'crdUpgradeJob:' deploy/helm/dex-operator/values.yaml | grep 'repository:' | awk '{print $2}')
+          KUBECTL_TAG=$(grep -A 5 'crdUpgradeJob:' deploy/helm/dex-operator/values.yaml | grep 'tag:' | sed 's/.*tag: *"\(.*\)"/\1/')
+          KUBECTL_IMG="${KUBECTL_REPO}:${KUBECTL_TAG}"
+          echo "Loading kubectl image: ${KUBECTL_IMG}"
+          docker pull "${KUBECTL_IMG}"
+          docker save "${KUBECTL_IMG}" | docker exec -i dex-operator-test-control-plane ctr --namespace=k8s.io images import -
 
       - name: Verify image in cluster
         run: |
