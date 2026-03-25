@@ -122,7 +122,8 @@ kind-load: docker-build ## Build and load the operator image into Kind.
 
 E2E_IMG ?= dex-operator:test
 
-KUBECTL_IMG ?= guidedtraffic/kubectl:1.33
+# Derive kubectl image from Helm values.yaml so Renovate tag bumps propagate automatically.
+KUBECTL_IMG ?= $(shell grep -A 5 'crdUpgradeJob:' deploy/helm/dex-operator/values.yaml | grep 'repository:' | awk '{print $$2}'):$(shell grep -A 5 'crdUpgradeJob:' deploy/helm/dex-operator/values.yaml | grep 'tag:' | sed 's/.*tag: *"\(.*\)"/\1/')
 
 .PHONY: e2e-local
 e2e-local: kind-create ## Run full E2E test locally with Kind.
