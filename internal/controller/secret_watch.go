@@ -22,9 +22,27 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	dexv1 "github.com/guided-traffic/dex-operator/api/v1"
 )
+
+// secretWatchPredicate returns a predicate that allows Create and Update
+// events but suppresses Delete events.  When a referenced Secret is deleted
+// while the owning child resource (connector / static client) still exists,
+// we assume the Secret will be recreated shortly (e.g. during a credential
+// rotation).  Reconciling on the delete would error out (secret not found)
+// and cause a noisy retry loop.  The subsequent Create event for the
+// replacement Secret will trigger a proper reconcile and rollout restart.
+func secretWatchPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc:  func(event.CreateEvent) bool { return true },
+		UpdateFunc:  func(event.UpdateEvent) bool { return true },
+		DeleteFunc:  func(event.DeleteEvent) bool { return false },
+		GenericFunc: func(event.GenericEvent) bool { return true },
+	}
+}
 
 // mapSecretToInstallation maps a changed Secret to the DexInstallation(s)
 // that should be re-reconciled. It queries all child resource types

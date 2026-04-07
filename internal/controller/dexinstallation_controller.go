@@ -26,12 +26,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	dexv1 "github.com/guided-traffic/dex-operator/api/v1"
-	"github.com/guided-traffic/dex-operator/internal/builder"
+	intbuilder "github.com/guided-traffic/dex-operator/internal/builder"
 )
 
 // DexInstallationReconciler reconciles a DexInstallation object.
@@ -82,7 +83,7 @@ func (r *DexInstallationReconciler) reconcileInstallation(
 		return ctrl.Result{}, fmt.Errorf("collecting static clients: %w", err)
 	}
 
-	out, err := builder.Build(ctx, builder.Input{
+	out, err := intbuilder.Build(ctx, intbuilder.Input{
 		Installation:  installation,
 		Connectors:    connectors,
 		StaticClients: clients,
@@ -133,8 +134,8 @@ func (r *DexInstallationReconciler) reconcileInstallation(
 	return ctrl.Result{}, nil
 }
 
-// makeSecretResolver returns a [builder.SecretResolver] backed by the API server.
-func (r *DexInstallationReconciler) makeSecretResolver() builder.SecretResolver {
+// makeSecretResolver returns a [intbuilder.SecretResolver] backed by the API server.
+func (r *DexInstallationReconciler) makeSecretResolver() intbuilder.SecretResolver {
 	return func(ctx context.Context, namespace string, ref dexv1.SecretKeyRef) (string, error) {
 		var secret corev1.Secret
 		if err := r.Get(ctx, types.NamespacedName{Namespace: namespace, Name: ref.Name}, &secret); err != nil {
@@ -152,7 +153,7 @@ func (r *DexInstallationReconciler) makeSecretResolver() builder.SecretResolver 
 }
 
 // countConnectors returns the total number of connectors across all types.
-func countConnectors(cs builder.ConnectorSet) int {
+func countConnectors(cs intbuilder.ConnectorSet) int {
 	return len(cs.LDAP) + len(cs.GitHub) + len(cs.SAML) +
 		len(cs.GitLab) + len(cs.OIDC) + len(cs.OAuth2) +
 		len(cs.Google) + len(cs.LinkedIn) + len(cs.Microsoft) +
@@ -231,7 +232,16 @@ func (r *DexInstallationReconciler) buildController(mgr ctrl.Manager) error {
 	for _, obj := range childWatches {
 		b = b.Watches(obj, handler.EnqueueRequestsFromMapFunc(mapChildToInstallation))
 	}
-	b = b.Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.mapSecretToInstallation))
+	// Watch referenced Secrets for create and update events only.
+	// Deletes are intentionally ignored: if a referenced Secret is removed
+	// while the child resource still exists, we assume a replacement will
+	// be created shortly.  Reconciling on the subsequent create/update is
+	// sufficient and avoids a failing reconcile loop in the meantime.
+	b = b.Watches(
+		&corev1.Secret{},
+		handler.EnqueueRequestsFromMapFunc(r.mapSecretToInstallation),
+		builder.WithPredicates(secretWatchPredicate()),
+	)
 	return b.Complete(r)
 }
 
