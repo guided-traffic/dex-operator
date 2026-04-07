@@ -16,6 +16,13 @@ limitations under the License.
 
 package controller
 
+import (
+	"context"
+
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
 // IsNamespaceAllowed exposes [isNamespaceAllowed] for white-box testing.
 var IsNamespaceAllowed = isNamespaceAllowed
 
@@ -25,6 +32,9 @@ var RolloutEnabled = rolloutEnabled
 // SecretDataEqual exposes [secretDataEqual] for white-box testing.
 var SecretDataEqual = secretDataEqual
 
+// YamlSecretDataEqual exposes [yamlSecretDataEqual] for white-box testing.
+var YamlSecretDataEqual = yamlSecretDataEqual
+
 // CountConnectors exposes [countConnectors] for white-box testing.
 var CountConnectors = countConnectors
 
@@ -33,3 +43,12 @@ var IsConfigError = isConfigError
 
 // NewConfigError exposes [newConfigError] for white-box testing.
 var NewConfigError = newConfigError
+
+// LookupChildSecretRefs exposes [lookupChildSecretRefs] for white-box testing.
+var LookupChildSecretRefs = lookupChildSecretRefs
+
+// MapSecretToInstallation exposes [DexInstallationReconciler.mapSecretToInstallation]
+// for white-box testing. Usage: r.MapSecretToInstallation(ctx, obj).
+func (r *DexInstallationReconciler) MapSecretToInstallation(ctx context.Context, obj client.Object) []ctrl.Request {
+	return r.mapSecretToInstallation(ctx, obj)
+}

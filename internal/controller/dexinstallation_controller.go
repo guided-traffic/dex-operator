@@ -103,6 +103,7 @@ func (r *DexInstallationReconciler) reconcileInstallation(
 		installation.Spec.ConfigSecretName,
 		labels,
 		map[string][]byte{"config.yaml": out.ConfigYAML},
+		yamlSecretDataEqual,
 	)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("applying config secret: %w", err)
@@ -114,6 +115,7 @@ func (r *DexInstallationReconciler) reconcileInstallation(
 		installation.Spec.EnvSecretName,
 		labels,
 		out.EnvSecretData,
+		secretDataEqual,
 	)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("applying env secret: %w", err)
@@ -209,7 +211,14 @@ func (r *DexInstallationReconciler) registerIndexers(mgr ctrl.Manager) error {
 			InstallationRefIndexField,
 			InstallationRefIndexFunc,
 		); err != nil {
-			return fmt.Errorf("registering indexer for %T: %w", obj, err)
+			return fmt.Errorf("registering installationRef indexer for %T: %w", obj, err)
+		}
+		if err := mgr.GetFieldIndexer().IndexField(
+			context.Background(), obj,
+			SecretRefIndexField,
+			SecretRefIndexFunc,
+		); err != nil {
+			return fmt.Errorf("registering secretRef indexer for %T: %w", obj, err)
 		}
 	}
 	return nil
@@ -222,6 +231,7 @@ func (r *DexInstallationReconciler) buildController(mgr ctrl.Manager) error {
 	for _, obj := range childWatches {
 		b = b.Watches(obj, handler.EnqueueRequestsFromMapFunc(mapChildToInstallation))
 	}
+	b = b.Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.mapSecretToInstallation))
 	return b.Complete(r)
 }
 
