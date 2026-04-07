@@ -256,7 +256,7 @@ func (c *DexStaticClient) GetReferencedSecretNames() []string {
 // SecretKeyRef pointers.  nil entries and empty names are silently skipped.
 func collectSecretNames(refs ...*SecretKeyRef) []string {
 	seen := make(map[string]struct{}, len(refs))
-	var names []string
+	names := make([]string, 0, len(refs))
 	for _, ref := range refs {
 		if ref == nil || ref.Name == "" {
 			continue

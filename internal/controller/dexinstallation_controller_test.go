@@ -47,11 +47,11 @@ func newTestScheme(t *testing.T) *runtime.Scheme {
 }
 
 // minimalInstallation creates a DexInstallation suitable for controller tests.
-func minimalInstallation(ns string) *dexv1.DexInstallation {
+func minimalInstallation() *dexv1.DexInstallation {
 	return &dexv1.DexInstallation{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-installation",
-			Namespace: ns,
+			Namespace: "dex",
 		},
 		Spec: dexv1.DexInstallationSpec{
 			Issuer:            "https://dex.example.com",
@@ -118,7 +118,7 @@ func newReconciler(t *testing.T, objs ...client.Object) (*controller.DexInstalla
 
 // TestReconcile_Minimal verifies that a minimal DexInstallation creates both secrets.
 func TestReconcile_Minimal(t *testing.T) {
-	inst := minimalInstallation("dex")
+	inst := minimalInstallation()
 	r, c := newReconciler(t, inst)
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
@@ -183,7 +183,7 @@ func TestReconcile_NotFound(t *testing.T) {
 // TestReconcile_WithOIDCConnector verifies that an OIDC connector is included
 // in the config when it references the installation and its credentials secret exists.
 func TestReconcile_WithOIDCConnector(t *testing.T) {
-	inst := minimalInstallation("dex")
+	inst := minimalInstallation()
 
 	credSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "oidc-creds", Namespace: "dex"},
@@ -243,7 +243,7 @@ func TestReconcile_WithOIDCConnector(t *testing.T) {
 // TestReconcile_SecretReuse verifies that a second reconcile does not recreate
 // the secrets if nothing changed.
 func TestReconcile_SecretReuse(t *testing.T) {
-	inst := minimalInstallation("dex")
+	inst := minimalInstallation()
 	r, c := newReconciler(t, inst)
 
 	reconcileOnce := func() {
@@ -406,7 +406,7 @@ func TestChildReconciler_InstallationNotFound(t *testing.T) {
 // referenced by an OIDC connector results in a reconcile request for the
 // owning DexInstallation.
 func TestMapSecretToInstallation_OIDCConnector(t *testing.T) {
-	inst := minimalInstallation("dex")
+	inst := minimalInstallation()
 
 	credSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "oidc-creds", Namespace: "dex"},
@@ -442,7 +442,7 @@ func TestMapSecretToInstallation_OIDCConnector(t *testing.T) {
 // TestMapSecretToInstallation_StaticClient verifies that changing a Secret
 // referenced by a DexStaticClient triggers reconciliation.
 func TestMapSecretToInstallation_StaticClient(t *testing.T) {
-	inst := minimalInstallation("dex")
+	inst := minimalInstallation()
 
 	clientSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "grafana-creds", Namespace: "dex"},
@@ -477,7 +477,7 @@ func TestMapSecretToInstallation_StaticClient(t *testing.T) {
 // TestMapSecretToInstallation_UnreferencedSecret verifies that a Secret
 // not referenced by any child object produces no reconcile requests.
 func TestMapSecretToInstallation_UnreferencedSecret(t *testing.T) {
-	inst := minimalInstallation("dex")
+	inst := minimalInstallation()
 
 	unrelatedSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "unrelated", Namespace: "dex"},
@@ -496,7 +496,7 @@ func TestMapSecretToInstallation_UnreferencedSecret(t *testing.T) {
 // deduplication: two connectors referencing the same secret and installation
 // produce only one request.
 func TestMapSecretToInstallation_MultipleConnectorsSameInstallation(t *testing.T) {
-	inst := minimalInstallation("dex")
+	inst := minimalInstallation()
 
 	sharedSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "shared-creds", Namespace: "dex"},
@@ -537,7 +537,7 @@ func TestMapSecretToInstallation_MultipleConnectorsSameInstallation(t *testing.T
 // TestMapSecretToInstallation_DifferentNamespace verifies that a Secret in
 // a different namespace than the connector does not trigger a reconcile.
 func TestMapSecretToInstallation_DifferentNamespace(t *testing.T) {
-	inst := minimalInstallation("dex")
+	inst := minimalInstallation()
 
 	// Connector is in namespace "apps" referencing a secret "creds" in "apps"
 	connector := &dexv1.DexOIDCConnector{
@@ -569,7 +569,7 @@ func TestMapSecretToInstallation_DifferentNamespace(t *testing.T) {
 // credential secret is rotated, the reconcile picks up the new value in the
 // env secret.
 func TestReconcile_SecretRotationUpdatesEnv(t *testing.T) {
-	inst := minimalInstallation("dex")
+	inst := minimalInstallation()
 
 	credSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "oidc-creds", Namespace: "dex"},
