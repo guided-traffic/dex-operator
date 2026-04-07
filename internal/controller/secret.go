@@ -19,7 +19,9 @@ package controller
 import (
 	"bytes"
 	"context"
+	"reflect"
 
+	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,15 +29,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// dataEqualFunc compares two secret data maps and returns true when their
+// contents are considered equal.
+type dataEqualFunc func(a, b map[string][]byte) bool
+
 // applySecret creates or updates a Secret with the given data.
 // It returns true when the secret data has actually changed, false when
-// the existing content already matched.
+// the existing content already matched.  The equal function determines how
+// existing and desired data are compared.
 func applySecret(
 	ctx context.Context,
 	c client.Client,
 	namespace, name string,
 	labels map[string]string,
 	data map[string][]byte,
+	equal dataEqualFunc,
 ) (changed bool, err error) {
 	var existing corev1.Secret
 	nsName := types.NamespacedName{Namespace: namespace, Name: name}
@@ -50,7 +58,7 @@ func applySecret(
 		return true, c.Create(ctx, secret)
 	}
 
-	if secretDataEqual(existing.Data, data) {
+	if equal(existing.Data, data) {
 		return false, nil
 	}
 
@@ -87,4 +95,37 @@ func secretDataEqual(a, b map[string][]byte) bool {
 		}
 	}
 	return true
+}
+
+// yamlSecretDataEqual compares two secret data maps using semantic YAML
+// comparison for each value.  This avoids false diffs caused by non-
+// deterministic map key ordering in yaml.Marshal output.
+// If a value cannot be parsed as YAML, it falls back to byte comparison.
+func yamlSecretDataEqual(a, b map[string][]byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, va := range a {
+		vb, ok := b[k]
+		if !ok {
+			return false
+		}
+		if !yamlBytesEqual(va, vb) {
+			return false
+		}
+	}
+	return true
+}
+
+// yamlBytesEqual compares two byte slices semantically as YAML.
+// If either slice cannot be parsed, it falls back to bytes.Equal.
+func yamlBytesEqual(a, b []byte) bool {
+	var va, vb any
+	if err := yaml.Unmarshal(a, &va); err != nil {
+		return bytes.Equal(a, b)
+	}
+	if err := yaml.Unmarshal(b, &vb); err != nil {
+		return bytes.Equal(a, b)
+	}
+	return reflect.DeepEqual(va, vb)
 }

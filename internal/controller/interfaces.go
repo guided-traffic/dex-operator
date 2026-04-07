@@ -30,4 +30,9 @@ type ChildObject interface {
 	// GetCommonStatus returns a pointer to the shared status block so
 	// controllers can read / write conditions and observedGeneration.
 	GetCommonStatus() *dexv1.CommonStatus
+	// GetReferencedSecretNames returns the names of all Kubernetes Secrets
+	// referenced by this resource (e.g. clientSecretRef, bindPWRef).
+	// Used by the secret-watch indexer to trigger reconciliation when a
+	// referenced Secret changes.
+	GetReferencedSecretNames() []string
 }

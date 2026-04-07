@@ -30,6 +30,11 @@ import (
 // resources to index their spec.installationRef value.
 const InstallationRefIndexField = ".spec.installationRef"
 
+// SecretRefIndexField is the field-selector key used by all child resources
+// to index the names of Kubernetes Secrets they reference. This enables the
+// DexInstallation controller to react to Secret changes.
+const SecretRefIndexField = ".spec.referencedSecrets"
+
 // installationRefIndexValue returns the index value for a given installation
 // reference in the format "namespace/name".
 func installationRefIndexValue(namespace, name string) string {
@@ -45,6 +50,17 @@ func InstallationRefIndexFunc(obj client.Object) []string {
 	}
 	ref := child.GetInstallationRef()
 	return []string{installationRefIndexValue(ref.Namespace, ref.Name)}
+}
+
+// SecretRefIndexFunc is the IndexerFunc that returns the names of all
+// Kubernetes Secrets referenced by a child resource. Register it with
+// mgr.GetFieldIndexer().IndexField for every child GVK.
+func SecretRefIndexFunc(obj client.Object) []string {
+	child, ok := obj.(ChildObject)
+	if !ok {
+		return nil
+	}
+	return child.GetReferencedSecretNames()
 }
 
 // filterItems retains only items whose namespace appears in allowed.
