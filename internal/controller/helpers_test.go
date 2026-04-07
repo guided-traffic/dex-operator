@@ -20,7 +20,9 @@ import (
 	"fmt"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	dexv1 "github.com/guided-traffic/dex-operator/api/v1"
 	"github.com/guided-traffic/dex-operator/internal/builder"
@@ -311,5 +313,28 @@ func TestGetReferencedSecretNames_NoSecrets(t *testing.T) {
 	local := &dexv1.DexLocalConnector{}
 	if names := local.GetReferencedSecretNames(); len(names) != 0 {
 		t.Errorf("Local should return no secrets, got %v", names)
+	}
+}
+
+// ── secretWatchPredicate ──────────────────────────────────────────────────────
+
+func TestSecretWatchPredicate_AllowsCreateAndUpdate(t *testing.T) {
+	p := controller.SecretWatchPredicate()
+	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "my-secret", Namespace: "default"}}
+
+	if !p.Create(event.CreateEvent{Object: secret}) {
+		t.Error("predicate should allow Create events")
+	}
+	if !p.Update(event.UpdateEvent{ObjectNew: secret, ObjectOld: secret}) {
+		t.Error("predicate should allow Update events")
+	}
+}
+
+func TestSecretWatchPredicate_RejectsDelete(t *testing.T) {
+	p := controller.SecretWatchPredicate()
+	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "my-secret", Namespace: "default"}}
+
+	if p.Delete(event.DeleteEvent{Object: secret}) {
+		t.Error("predicate should reject Delete events")
 	}
 }

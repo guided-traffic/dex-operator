@@ -21,6 +21,7 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 // IsNamespaceAllowed exposes [isNamespaceAllowed] for white-box testing.
@@ -51,4 +52,9 @@ var LookupChildSecretRefs = lookupChildSecretRefs
 // for white-box testing. Usage: r.MapSecretToInstallation(ctx, obj).
 func (r *DexInstallationReconciler) MapSecretToInstallation(ctx context.Context, obj client.Object) []ctrl.Request {
 	return r.mapSecretToInstallation(ctx, obj)
+}
+
+// SecretWatchPredicate exposes [secretWatchPredicate] for white-box testing.
+func SecretWatchPredicate() predicate.Predicate {
+	return secretWatchPredicate()
 }
