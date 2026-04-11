@@ -83,8 +83,110 @@ jobs:
 
       - name: Verify Kind cluster
         run: |
+          set -euo pipefail
           kubectl cluster-info
+          kubectl wait --for=condition=Ready nodes --all --timeout=180s
           kubectl get nodes
+
+      - name: Fix inotify limits inside Kind node
+        run: |
+          # Since Linux 5.13, inotify limits are user-namespace-aware.
+          # Host sysctl settings are NOT inherited by containers.
+          # kube-proxy crashes with "too many open files" without this.
+          docker exec dex-operator-test-control-plane sysctl -w fs.inotify.max_user_watches=1048576
+          docker exec dex-operator-test-control-plane sysctl -w fs.inotify.max_user_instances=8192
+
+      - name: Wait for kube-system pods
+        run: |
+          set -euo pipefail
+          echo "=== kube-system pod status before wait ==="
+          kubectl -n kube-system get pods -o wide
+          echo ""
+          echo "=== containerd info inside Kind node ==="
+          docker exec dex-operator-test-control-plane ctr version || true
+          echo ""
+
+          # ---------- helper: resilient daemonset wait ----------
+          # kube-proxy can crash on DinD runners when iptables kernel modules
+          # are slow to initialise. This helper detects Error/CrashLoopBackOff
+          # pods, collects logs for diagnosis, deletes them so the DaemonSet
+          # controller recreates them, and retries.
+          wait_daemonset() {
+            local ds_name="$1" label="$2" max_attempts=5
+            for attempt in $(seq 1 $max_attempts); do
+              echo "[${ds_name}] attempt ${attempt}/${max_attempts}"
+              if kubectl -n kube-system rollout status daemonset/"${ds_name}" --timeout=60s 2>/dev/null; then
+                echo "[${ds_name}] ready."
+                return 0
+              fi
+              # Collect diagnostics from broken pods
+              bad_pods=$(kubectl -n kube-system get pods -l "${label}" --no-headers 2>/dev/null \
+                         | grep -E 'Error|CrashLoopBackOff|Init:Error' | awk '{print $1}') || true
+              if [ -n "$bad_pods" ]; then
+                for pod in $bad_pods; do
+                  echo "[${ds_name}] logs from ${pod}:"
+                  kubectl -n kube-system logs "$pod" --tail=30 2>&1 || true
+                  echo "[${ds_name}] deleting ${pod} to trigger recreation..."
+                  kubectl -n kube-system delete pod "$pod" --force --grace-period=0 2>/dev/null || true
+                done
+                sleep 10
+              else
+                echo "[${ds_name}] no error pods found, pods may still be starting..."
+                sleep 15
+              fi
+            done
+            echo "ERROR: daemonset ${ds_name} not ready after ${max_attempts} attempts"
+            kubectl -n kube-system describe daemonset/"${ds_name}" || true
+            kubectl -n kube-system describe pods -l "${label}" || true
+            return 1
+          }
+
+          wait_daemonset "kube-proxy" "k8s-app=kube-proxy"
+          wait_daemonset "kindnet"    "app=kindnet"
+
+          echo "Waiting for coredns..."
+          kubectl -n kube-system rollout status deployment/coredns --timeout=120s
+
+          echo ""
+          echo "=== Final pod status ==="
+          kubectl -n kube-system get pods -o wide
+          echo "kube-system pods ready."
+
+      - name: Verify in-cluster API connectivity
+        run: |
+          # kube-proxy pods being Ready does NOT mean their iptables DNAT rules for
+          # ClusterIPs (e.g. kubernetes.default.svc -> 10.96.0.1:443) are applied yet.
+          # In DinD this race causes "dial tcp 10.96.0.1:443: i/o timeout" inside pods.
+          # Fix: probe from inside the cluster; if it fails, restart kube-proxy to force
+          # a full iptables resync, then verify again.
+          echo "Probing in-cluster kubernetes service connectivity..."
+          PROBE_OK=false
+          for attempt in 1 2 3; do
+            kubectl run api-probe -n default \
+              --image=busybox:1.36 \
+              --restart=Never \
+              -- sleep 60
+            kubectl wait -n default --for=condition=Ready pod/api-probe --timeout=60s
+
+            if kubectl exec -n default api-probe -- \
+                timeout 20 sh -c \
+                'until nc -z -w 2 kubernetes.default.svc 443 2>/dev/null; do sleep 2; done'; then
+              echo "In-cluster API connectivity OK (attempt ${attempt})"
+              PROBE_OK=true
+              kubectl delete -n default pod api-probe --force --grace-period=0
+              break
+            fi
+
+            echo "Connectivity check failed on attempt ${attempt} — restarting kube-proxy to force iptables resync..."
+            kubectl delete -n default pod api-probe --force --grace-period=0 || true
+            kubectl -n kube-system rollout restart daemonset/kube-proxy
+            kubectl -n kube-system rollout status daemonset/kube-proxy --timeout=60s
+          done
+
+          if [ "$PROBE_OK" = "false" ]; then
+            echo "ERROR: In-cluster API connectivity could not be established after 3 attempts"
+            exit 1
+          fi
 
       - name: Build and load operator image
         run: |
