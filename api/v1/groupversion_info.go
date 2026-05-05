@@ -20,8 +20,11 @@ limitations under the License.
 package v1
 
 import (
+	"reflect"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/scheme"
 )
 
 var (
@@ -29,8 +32,31 @@ var (
 	GroupVersion = schema.GroupVersion{Group: "dex.gtrfc.com", Version: "v1"}
 
 	// SchemeBuilder is used to add functions to this group's scheme.
-	SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion}
+	SchemeBuilder = &builder{GroupVersion: GroupVersion}
 
 	// AddToScheme adds the types in this group-version to the given scheme.
 	AddToScheme = SchemeBuilder.AddToScheme
 )
+
+// builder mirrors sigs.k8s.io/controller-runtime/pkg/scheme.Builder without
+// pulling controller-runtime into the api package.
+type builder struct {
+	GroupVersion schema.GroupVersion
+	runtime.SchemeBuilder
+}
+
+func (b *builder) Register(objects ...runtime.Object) *builder {
+	b.SchemeBuilder.Register(func(s *runtime.Scheme) error {
+		for _, obj := range objects {
+			gvk := b.GroupVersion.WithKind(reflect.TypeOf(obj).Elem().Name())
+			s.AddKnownTypeWithName(gvk, obj)
+		}
+		metav1.AddToGroupVersion(s, b.GroupVersion)
+		return nil
+	})
+	return b
+}
+
+func (b *builder) AddToScheme(s *runtime.Scheme) error {
+	return b.SchemeBuilder.AddToScheme(s)
+}
