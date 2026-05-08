@@ -63,7 +63,8 @@
         "gomod"
       ],
       "matchDepTypes": [
-        "require"
+        "require",
+        "indirect"
       ],
       "matchUpdateTypes": [
         "minor",
@@ -78,7 +79,8 @@
         "gomod"
       ],
       "matchDepTypes": [
-        "require"
+        "require",
+        "indirect"
       ],
       "matchUpdateTypes": [
         "major"
