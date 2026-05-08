@@ -15,7 +15,9 @@
   "automergeType": "pr",
   "automergeStrategy": "squash",
   "ignoreTests": false,
-  "prConcurrentLimit": 5,
+  "prConcurrentLimit": 0,
+  "prHourlyLimit": 0,
+  "branchConcurrentLimit": 0,
   "rebaseWhen": "conflicted",
   "postUpdateOptions": [
     "gomodTidy",
