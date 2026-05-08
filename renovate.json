@@ -179,7 +179,17 @@
       ]
     },
     {
-      "description": "Group golang.org/x/* modules with Go version updates so x-packages bump in lockstep with the toolchain",
+      "description": "Enable updates for indirect Go module dependencies (off by default) so vulnerable transitive deps like golang.org/x/net get patched",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchDepTypes": [
+        "indirect"
+      ],
+      "enabled": true
+    },
+    {
+      "description": "Group golang.org/x/* modules (direct or indirect) with Go version updates so x-packages bump in lockstep with the toolchain",
       "matchPackageNames": [
         "golang",
         "/^golang\\.org/x//"
