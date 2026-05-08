@@ -179,6 +179,15 @@
       ]
     },
     {
+      "description": "Group golang.org/x/* modules with Go version updates so x-packages bump in lockstep with the toolchain",
+      "matchPackageNames": [
+        "golang",
+        "/^golang\\.org/x//"
+      ],
+      "groupName": "Go version",
+      "groupSlug": "go-version"
+    },
+    {
       "description": "Use 'fix' instead of 'chore' for dependency updates",
       "semanticCommitType": "fix",
       "matchUpdateTypes": [
