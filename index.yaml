@@ -2,8 +2,30 @@ apiVersion: v1
 entries:
   dex-operator:
   - apiVersion: v2
+    appVersion: 1.2.6
+    created: "2026-05-08T14:03:02.124491361Z"
+    description: A Kubernetes Operator that dynamically assembles Dex configuration
+      from Custom Resources
+    digest: 5b41d55d2df33eec0b807bea8b29a70817789ddd66838c6ca9d644e5c18c400e
+    home: https://github.com/guided-traffic/dex-operator
+    keywords:
+    - dex
+    - operator
+    - oidc
+    - sso
+    kubeVersion: '>=1.25.0-0'
+    maintainers:
+    - name: guidedtraffic
+    name: dex-operator
+    sources:
+    - https://github.com/guided-traffic/dex-operator
+    type: application
+    urls:
+    - https://guided-traffic.github.io/dex-operator/dex-operator-1.2.6.tgz
+    version: 1.2.6
+  - apiVersion: v2
     appVersion: 1.2.4
-    created: "2026-05-08T08:48:57.034684899Z"
+    created: "2026-05-08T14:03:02.123528977Z"
     description: A Kubernetes Operator that dynamically assembles Dex configuration
       from Custom Resources
     digest: 67aae53e3bbc36df59037eff38be79202aecf0a80e1c66d60764434e01610f5d
@@ -25,7 +47,7 @@ entries:
     version: 1.2.4
   - apiVersion: v2
     appVersion: 1.2.3
-    created: "2026-05-08T08:48:57.033696046Z"
+    created: "2026-05-08T14:03:02.12267092Z"
     description: A Kubernetes Operator that dynamically assembles Dex configuration
       from Custom Resources
     digest: b4a304073d5014cc2e3db29eff9fd758a04982c13d742429292e2388c17b2f76
@@ -47,7 +69,7 @@ entries:
     version: 1.2.3
   - apiVersion: v2
     appVersion: 1.2.2
-    created: "2026-05-08T08:48:57.0327647Z"
+    created: "2026-05-08T14:03:02.121741939Z"
     description: A Kubernetes Operator that dynamically assembles Dex configuration
       from Custom Resources
     digest: dd22a1fba72953143d656378010f17c85bfef273894bcbd4ff7dbe214a212e81
@@ -69,7 +91,7 @@ entries:
     version: 1.2.2
   - apiVersion: v2
     appVersion: 1.2.1
-    created: "2026-05-08T08:48:57.031907415Z"
+    created: "2026-05-08T14:03:02.120000867Z"
     description: A Kubernetes Operator that dynamically assembles Dex configuration
       from Custom Resources
     digest: dd80d69b83297661d6a574a0310d20155d7fca2603f6f3562ce41cedca2b8fa2
@@ -91,7 +113,7 @@ entries:
     version: 1.2.1
   - apiVersion: v2
     appVersion: 1.2.0
-    created: "2026-05-08T08:48:57.030654403Z"
+    created: "2026-05-08T14:03:02.119105851Z"
     description: A Kubernetes Operator that dynamically assembles Dex configuration
       from Custom Resources
     digest: 8410801b2fd7cd1b6e1a370c29164d609800058161faacd167c7d0f81deb9926
@@ -113,7 +135,7 @@ entries:
     version: 1.2.0
   - apiVersion: v2
     appVersion: 1.1.4
-    created: "2026-05-08T08:48:57.028621372Z"
+    created: "2026-05-08T14:03:02.118207667Z"
     description: A Kubernetes Operator that dynamically assembles Dex configuration
       from Custom Resources
     digest: b7b1958a252d1455c1831b663433ecd58e7f720cd9fd72788c2b937817761b20
@@ -135,7 +157,7 @@ entries:
     version: 1.1.4
   - apiVersion: v2
     appVersion: 1.1.3
-    created: "2026-05-08T08:48:57.027662785Z"
+    created: "2026-05-08T14:03:02.117252868Z"
     description: A Kubernetes Operator that dynamically assembles Dex configuration
       from Custom Resources
     digest: 82e6d2b53779245f9caf7f55c9cb13b6673fc3c5a12fc28a844ce585b068d855
@@ -157,7 +179,7 @@ entries:
     version: 1.1.3
   - apiVersion: v2
     appVersion: 1.1.2
-    created: "2026-05-08T08:48:57.026690383Z"
+    created: "2026-05-08T14:03:02.116363872Z"
     description: A Kubernetes Operator that dynamically assembles Dex configuration
       from Custom Resources
     digest: e866941299cdecbfc79c0f1a40eb7a8eb6681ad8b3c9cbbfa3e50d56ee6fd7fd
@@ -179,7 +201,7 @@ entries:
     version: 1.1.2
   - apiVersion: v2
     appVersion: 1.1.1
-    created: "2026-05-08T08:48:57.025708742Z"
+    created: "2026-05-08T14:03:02.115320616Z"
     description: A Kubernetes Operator that dynamically assembles Dex configuration
       from Custom Resources
     digest: db6e67539a3b1b1592d03fda79b54dfdca072c867853c2b1aba3646854f6437e
@@ -201,7 +223,7 @@ entries:
     version: 1.1.1
   - apiVersion: v2
     appVersion: 1.1.0
-    created: "2026-05-08T08:48:57.024701404Z"
+    created: "2026-05-08T14:03:02.113628356Z"
     description: A Kubernetes Operator that dynamically assembles Dex configuration
       from Custom Resources
     digest: f048e906deb79176cb5f10f4832da698a004d47619d284e09b33c767bbed0007
@@ -223,7 +245,7 @@ entries:
     version: 1.1.0
   - apiVersion: v2
     appVersion: 1.0.5
-    created: "2026-05-08T08:48:57.02275767Z"
+    created: "2026-05-08T14:03:02.112618794Z"
     description: A Kubernetes Operator that dynamically assembles Dex configuration
       from Custom Resources
     digest: b2001c858c183977f3559860e934803d5bc5b95f50726519839abdc5cb36a05d
@@ -245,7 +267,7 @@ entries:
     version: 1.0.5
   - apiVersion: v2
     appVersion: 1.0.4
-    created: "2026-05-08T08:48:57.021861441Z"
+    created: "2026-05-08T14:03:02.111476741Z"
     description: A Kubernetes Operator that dynamically assembles Dex configuration
       from Custom Resources
     digest: c971654b21629b2f2609ef86438d4d0f8b72847131b2b64b8b37e51d3679c7f3
@@ -267,7 +289,7 @@ entries:
     version: 1.0.4
   - apiVersion: v2
     appVersion: 1.0.3
-    created: "2026-05-08T08:48:57.020981642Z"
+    created: "2026-05-08T14:03:02.11054251Z"
     description: A Kubernetes Operator that dynamically assembles Dex configuration
       from Custom Resources
     digest: df2287f0a2709e3ff1ab7733091b74052f855d06731c2c7e56ad6b3b68f6dc13
@@ -289,7 +311,7 @@ entries:
     version: 1.0.3
   - apiVersion: v2
     appVersion: 1.0.2
-    created: "2026-05-08T08:48:57.020020591Z"
+    created: "2026-05-08T14:03:02.10949718Z"
     description: A Kubernetes Operator that dynamically assembles Dex configuration
       from Custom Resources
     digest: 6dd2e877a38e180e84b70e328f45b940a77fcc3b169a25eafbab633bce9e7b60
@@ -311,7 +333,7 @@ entries:
     version: 1.0.2
   - apiVersion: v2
     appVersion: 1.0.1
-    created: "2026-05-08T08:48:57.019126907Z"
+    created: "2026-05-08T14:03:02.107527568Z"
     description: A Kubernetes Operator that dynamically assembles Dex configuration
       from Custom Resources
     digest: 73e1a3fc01739c309bd2de41aaf5a47f0a5f72021175cf33bdf16240fc9ce594
@@ -333,7 +355,7 @@ entries:
     version: 1.0.1
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-05-08T08:48:57.018181505Z"
+    created: "2026-05-08T14:03:02.106443876Z"
     description: A Kubernetes Operator that dynamically assembles Dex configuration
       from Custom Resources
     digest: 68cdce61b7ae90dd5c9c6c4b2ae8d4d6ec96d9bf263d3cf8b7111c2abf231ec6
@@ -353,4 +375,4 @@ entries:
     urls:
     - https://guided-traffic.github.io/dex-operator/dex-operator-1.0.0.tgz
     version: 1.0.0
-generated: "2026-05-08T08:48:57.016044147Z"
+generated: "2026-05-08T14:03:02.104935632Z"
