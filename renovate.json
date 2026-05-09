@@ -202,14 +202,8 @@
       "groupSlug": "go-version"
     },
     {
-      "description": "Use 'fix' instead of 'chore' for dependency updates",
-      "semanticCommitType": "fix",
-      "matchUpdateTypes": [
-        "minor",
-        "patch",
-        "digest",
-        "pin"
-      ]
+      "description": "Use 'fix' instead of 'chore' for all dependency updates (including major)",
+      "semanticCommitType": "fix"
     },
     {
       "description": "GitHub Actions: use 'chore' instead of 'fix' for updates",
