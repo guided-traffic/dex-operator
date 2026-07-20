@@ -221,7 +221,7 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v5
         with:
-          version: 'v3.21.3'
+          version: 'v4.2.3'
 
       - name: Debug cluster state
         run: |
