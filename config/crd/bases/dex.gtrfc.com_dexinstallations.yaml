@@ -76,22 +76,6 @@ spec:
                   ConfigSecretName is the name of the Secret written to the Dex namespace
                   that holds the rendered Dex config.yaml.
                 type: string
-              cors:
-                description: CORS configures Cross-Origin Resource Sharing.
-                properties:
-                  allowedHeaders:
-                    description: AllowedHeaders lists additional headers to allow
-                      in CORS requests.
-                    items:
-                      type: string
-                    type: array
-                  allowedOrigins:
-                    description: AllowedOrigins lists origins that may send cross-origin
-                      requests.
-                    items:
-                      type: string
-                    type: array
-                type: object
               envSecretName:
                 description: |-
                   EnvSecretName is the name of the Secret written to the Dex namespace
@@ -325,12 +309,24 @@ spec:
                       connMaxLifetime:
                         description: ConnMaxLifetime in seconds.
                         type: integer
-                      dsn:
-                        description: DSN is the MySQL data source name.
+                      connectionTimeout:
+                        description: ConnectionTimeout in seconds.
+                        type: integer
+                      database:
+                        description: Database is the MySQL database name.
                         type: string
-                      dsnRef:
-                        description: DSNRef references the Secret key holding the
-                          MySQL DSN.
+                      host:
+                        description: Host is the MySQL host (host:port).
+                        type: string
+                      maxIdleConns:
+                        description: MaxIdleConns limits the number of idle connections.
+                        type: integer
+                      maxOpenConns:
+                        description: MaxOpenConns limits the number of open connections.
+                        type: integer
+                      passwordRef:
+                        description: PasswordRef references the Secret key holding
+                          the MySQL password.
                         properties:
                           key:
                             description: Key within the Secret.
@@ -342,12 +338,63 @@ spec:
                         - key
                         - name
                         type: object
-                      maxIdleConns:
-                        description: MaxIdleConns limits the number of idle connections.
-                        type: integer
-                      maxOpenConns:
-                        description: MaxOpenConns limits the number of open connections.
-                        type: integer
+                      ssl:
+                        description: SSL configures MySQL TLS.
+                        properties:
+                          caRef:
+                            description: CARef references the Secret key holding the
+                              CA certificate.
+                            properties:
+                              key:
+                                description: Key within the Secret.
+                                type: string
+                              name:
+                                description: Name of the Secret resource.
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                          certRef:
+                            description: CertRef references the Secret key holding
+                              the client certificate.
+                            properties:
+                              key:
+                                description: Key within the Secret.
+                                type: string
+                              name:
+                                description: Name of the Secret resource.
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                          keyRef:
+                            description: KeyRef references the Secret key holding
+                              the client private key.
+                            properties:
+                              key:
+                                description: Key within the Secret.
+                                type: string
+                              name:
+                                description: Name of the Secret resource.
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                          mode:
+                            description: Mode is the MySQL SSL mode (e.g. disable,
+                              require, verify-ca, verify-identity).
+                            type: string
+                        type: object
+                      user:
+                        description: User is the MySQL user.
+                        type: string
+                    required:
+                    - database
+                    - host
+                    - user
                     type: object
                   postgres:
                     description: Postgres configures a PostgreSQL storage backend.
@@ -471,6 +518,12 @@ spec:
               web:
                 description: Web configures the HTTP/HTTPS endpoints of Dex.
                 properties:
+                  allowedHeaders:
+                    description: AllowedHeaders lists additional headers to allow
+                      in cross-origin requests.
+                    items:
+                      type: string
+                    type: array
                   allowedOrigins:
                     description: AllowedOrigins lists origins from which cross-origin
                       requests are allowed.

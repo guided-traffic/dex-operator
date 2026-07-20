@@ -74,13 +74,12 @@
       "automerge": true
     },
     {
-      "description": "Go modules: require manual review for major updates",
+      "description": "Go modules (direct): require manual review for major updates",
       "matchManagers": [
         "gomod"
       ],
       "matchDepTypes": [
-        "require",
-        "indirect"
+        "require"
       ],
       "matchUpdateTypes": [
         "major"
@@ -90,6 +89,19 @@
         "dependencies",
         "major-update"
       ]
+    },
+    {
+      "description": "Go modules (indirect): disable major updates entirely",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchDepTypes": [
+        "indirect"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "enabled": false
     },
     {
       "description": "Docker base images (non-Go): automerge minor and patch updates",
@@ -203,6 +215,7 @@
     },
     {
       "description": "Use 'fix' instead of 'chore' for all dependency updates (including major)",
+      "matchPackageNames": ["*"],
       "semanticCommitType": "fix"
     },
     {

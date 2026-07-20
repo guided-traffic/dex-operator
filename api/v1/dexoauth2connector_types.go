@@ -68,13 +68,13 @@ type DexOAuth2ConnectorSpec struct {
 	// +optional
 	RootCARef *SecretKeyRef `json:"rootCARef,omitempty"`
 
-	// HeaderPrefix is prepended to the Authorization header value.
+	// InsecureSkipVerify disables TLS certificate verification of the provider.
 	// +optional
-	HeaderPrefix string `json:"headerPrefix,omitempty"`
+	InsecureSkipVerify bool `json:"insecureSkipVerify,omitempty"`
 
-	// InsecureTrustEmail trusts the email claim without verifying email_verified.
+	// UserIDKey is the claim used as the user ID. Defaults to "id".
 	// +optional
-	InsecureTrustEmail bool `json:"insecureTrustEmail,omitempty"`
+	UserIDKey string `json:"userIDKey,omitempty"`
 
 	// ClaimMapping maps provider claim fields to Dex claim fields.
 	// +optional
@@ -83,6 +83,10 @@ type DexOAuth2ConnectorSpec struct {
 
 // OAuth2ClaimMapping maps provider claims to Dex's standard claims.
 type OAuth2ClaimMapping struct {
+	// UserName maps a provider claim to the username. Defaults to "user_name".
+	// +optional
+	UserName string `json:"userName,omitempty"`
+
 	// PreferredUsername maps a provider claim to preferred_username.
 	// +optional
 	PreferredUsername string `json:"preferredUsername,omitempty"`
@@ -90,6 +94,10 @@ type OAuth2ClaimMapping struct {
 	// Email maps a provider claim to the email claim.
 	// +optional
 	Email string `json:"email,omitempty"`
+
+	// EmailVerified maps a provider claim to the email_verified claim.
+	// +optional
+	EmailVerified string `json:"emailVerified,omitempty"`
 
 	// Groups maps a provider claim to the groups claim.
 	// +optional

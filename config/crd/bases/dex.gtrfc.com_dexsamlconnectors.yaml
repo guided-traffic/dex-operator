@@ -62,20 +62,6 @@ spec:
                 items:
                   type: string
                 type: array
-              caBundleRef:
-                description: CABundleRef references the Secret key holding a PEM CA
-                  bundle.
-                properties:
-                  key:
-                    description: Key within the Secret.
-                    type: string
-                  name:
-                    description: Name of the Secret resource.
-                    type: string
-                required:
-                - key
-                - name
-                type: object
               caRef:
                 description: |-
                   CARef references the Secret key holding the PEM-encoded CA certificate

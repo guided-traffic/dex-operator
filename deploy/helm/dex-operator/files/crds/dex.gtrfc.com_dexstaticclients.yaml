@@ -57,11 +57,6 @@ spec:
             description: DexStaticClientSpec defines the desired state of a Dex static
               OAuth2 client.
             properties:
-              allowedScopes:
-                description: AllowedScopes restricts which scopes the client may request.
-                items:
-                  type: string
-                type: array
               displayName:
                 description: |-
                   DisplayName is the human-readable display name of the client shown on the

@@ -39,28 +39,18 @@ type DexKeystoneConnectorSpec struct {
 	// +kubebuilder:validation:Format=uri
 	KeystoneHost string `json:"keystoneHost"`
 
-	// KeystoneAdminURL is the Keystone admin endpoint used for group/role
-	// lookups (e.g. https://keystone.example.com:35357).
-	// +optional
-	KeystoneAdminURL string `json:"keystoneAdminURL,omitempty"`
-
 	// Domain restricts authentication to a specific Keystone domain name.
 	// +optional
 	Domain string `json:"domain,omitempty"`
 
-	// AdminUsername is the Keystone admin username for directory lookups.
+	// KeystoneUsername is the Keystone admin username used for directory lookups.
 	// +optional
-	AdminUsername string `json:"adminUsername,omitempty"`
+	KeystoneUsername string `json:"keystoneUsername,omitempty"`
 
-	// AdminPasswordRef references the Secret key holding the Keystone admin
+	// KeystonePasswordRef references the Secret key holding the Keystone admin
 	// password.
 	// +optional
-	AdminPasswordRef *SecretKeyRef `json:"adminPasswordRef,omitempty"`
-
-	// Groups restricts login to users who have at least one of the listed roles
-	// in Keystone.
-	// +optional
-	Groups []string `json:"groups,omitempty"`
+	KeystonePasswordRef *SecretKeyRef `json:"keystonePasswordRef,omitempty"`
 }
 
 // DexKeystoneConnectorStatus defines the observed state of

@@ -146,13 +146,7 @@ func assembleDexConfig(
 			TLSCert:        spec.Web.TLSCert,
 			TLSKey:         spec.Web.TLSKey,
 			AllowedOrigins: spec.Web.AllowedOrigins,
-		}
-	}
-
-	if spec.CORS != nil {
-		cfg.CORS = &CORSConfig{
-			AllowedOrigins: spec.CORS.AllowedOrigins,
-			AllowedHeaders: spec.CORS.AllowedHeaders,
+			AllowedHeaders: spec.Web.AllowedHeaders,
 		}
 	}
 

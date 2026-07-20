@@ -22,7 +22,6 @@ type DexConfig struct {
 	Issuer           string           `yaml:"issuer"`
 	Storage          StorageConfig    `yaml:"storage"`
 	Web              *WebConfig       `yaml:"web,omitempty"`
-	CORS             *CORSConfig      `yaml:"cors,omitempty"`
 	GRPC             *GRPCConfig      `yaml:"grpc,omitempty"`
 	Logger           *LoggerConfig    `yaml:"logger,omitempty"`
 	Expiry           *ExpiryConfig    `yaml:"expiry,omitempty"`
@@ -45,11 +44,6 @@ type WebConfig struct {
 	HTTPS          string   `yaml:"https,omitempty"`
 	TLSCert        string   `yaml:"tlsCert,omitempty"`
 	TLSKey         string   `yaml:"tlsKey,omitempty"`
-	AllowedOrigins []string `yaml:"allowedOrigins,omitempty"`
-}
-
-// CORSConfig configures Cross-Origin Resource Sharing.
-type CORSConfig struct {
 	AllowedOrigins []string `yaml:"allowedOrigins,omitempty"`
 	AllowedHeaders []string `yaml:"allowedHeaders,omitempty"`
 }
@@ -115,11 +109,10 @@ type ConnectorEntry struct {
 
 // StaticClient represents a statically configured OAuth2 client in Dex.
 type StaticClient struct {
-	ID            string   `yaml:"id"`
-	SecretEnv     string   `yaml:"secretEnv,omitempty"`
-	Name          string   `yaml:"name,omitempty"`
-	RedirectURIs  []string `yaml:"redirectURIs,omitempty"`
-	AllowedScopes []string `yaml:"allowedScopes,omitempty"`
-	TrustedPeers  []string `yaml:"trustedPeers,omitempty"`
-	Public        bool     `yaml:"public,omitempty"`
+	ID           string   `yaml:"id"`
+	SecretEnv    string   `yaml:"secretEnv,omitempty"`
+	Name         string   `yaml:"name,omitempty"`
+	RedirectURIs []string `yaml:"redirectURIs,omitempty"`
+	TrustedPeers []string `yaml:"trustedPeers,omitempty"`
+	Public       bool     `yaml:"public,omitempty"`
 }

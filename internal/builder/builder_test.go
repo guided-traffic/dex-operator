@@ -680,7 +680,11 @@ func TestBuild_SAMLConnector_CACertMounted(t *testing.T) {
 
 func TestBuild_FullInstallationOptions(t *testing.T) {
 	inst := minimalInstallation("ns")
-	inst.Spec.Web = &dexv1.DexWebSpec{HTTP: "0.0.0.0:5556"}
+	inst.Spec.Web = &dexv1.DexWebSpec{
+		HTTP:           "0.0.0.0:5556",
+		AllowedOrigins: []string{"https://a.example.com", "https://b.example.com"},
+		AllowedHeaders: []string{"Authorization", "X-Custom"},
+	}
 	inst.Spec.Logger = &dexv1.DexLoggerSpec{Level: "debug", Format: "json"}
 	inst.Spec.Expiry = &dexv1.DexExpirySpec{IDTokens: "24h", SigningKeys: "6h"}
 	inst.Spec.OAuth2 = &dexv1.DexOAuth2ConfigSpec{SkipApprovalScreen: true}
@@ -700,6 +704,19 @@ func TestBuild_FullInstallationOptions(t *testing.T) {
 	web := m["web"].(map[string]any)
 	if web["http"] != "0.0.0.0:5556" {
 		t.Errorf("web.http = %v", web["http"])
+	}
+
+	// Dex has no top-level "cors" key; origins and headers belong under web.
+	if _, ok := m["cors"]; ok {
+		t.Errorf("config must not contain top-level cors key: %v", m["cors"])
+	}
+	origins := web["allowedOrigins"].([]any)
+	if len(origins) != 2 || origins[0] != "https://a.example.com" {
+		t.Errorf("web.allowedOrigins = %v", origins)
+	}
+	headers := web["allowedHeaders"].([]any)
+	if len(headers) != 2 || headers[0] != "Authorization" {
+		t.Errorf("web.allowedHeaders = %v", headers)
 	}
 
 	logger := m["logger"].(map[string]any)

@@ -69,11 +69,12 @@ func buildStorage(
 
 	case dexv1.StorageMySQL:
 		if spec.MySQL != nil {
-			cfg, err := buildMySQLConfig(ctx, spec.MySQL, sr, namespace, envs)
+			cfg, myMounts, err := buildMySQLConfig(ctx, spec.MySQL, sr, namespace, envs)
 			if err != nil {
 				return StorageConfig{}, nil, fmt.Errorf("mysql storage: %w", err)
 			}
 			sc.Config = cfg
+			mounts = append(mounts, myMounts...)
 		}
 	}
 
@@ -248,27 +249,80 @@ func buildMySQLConfig(
 	sr SecretResolver,
 	namespace string,
 	envs map[string][]byte,
-) (map[string]any, error) {
-	cfg := map[string]any{}
+) (map[string]any, []MountedSecret, error) {
+	cfg := map[string]any{
+		"host":     s.Host,
+		"database": s.Database,
+		"user":     s.User,
+	}
 
-	switch {
-	case s.DSNRef != nil:
-		envKey := storageEnvKey("MYSQL_DSN")
-		ref, err := resolveEnvSecret(ctx, namespace, *s.DSNRef, envKey, sr, envs)
+	var mounts []MountedSecret
+
+	if s.PasswordRef != nil {
+		envKey := storageEnvKey("MYSQL_PASSWORD")
+		ref, err := resolveEnvSecret(ctx, namespace, *s.PasswordRef, envKey, sr, envs)
 		if err != nil {
-			return nil, fmt.Errorf("mysql DSN: %w", err)
+			return nil, nil, fmt.Errorf("mysql password: %w", err)
 		}
-		cfg["dsn"] = ref
-
-	case s.DSN != "":
-		cfg["dsn"] = s.DSN
+		cfg["password"] = ref
 	}
 
 	setOptionalInt(cfg, "maxOpenConns", s.MaxOpenConns)
 	setOptionalInt(cfg, "maxIdleConns", s.MaxIdleConns)
 	setOptionalInt(cfg, "connMaxLifetime", s.ConnMaxLifetime)
+	setOptionalInt(cfg, "connectionTimeout", s.ConnectionTimeout)
 
-	return cfg, nil
+	if s.SSL != nil {
+		sslCfg, sslMounts := buildMySQLSSL(s.SSL, namespace)
+		cfg["ssl"] = sslCfg
+		mounts = append(mounts, sslMounts...)
+	}
+
+	return cfg, mounts, nil
+}
+
+func buildMySQLSSL(s *dexv1.DexMySQLSSLSpec, namespace string) (map[string]any, []MountedSecret) {
+	cfg := map[string]any{}
+	var mounts []MountedSecret
+
+	if s.Mode != "" {
+		cfg["mode"] = s.Mode
+	}
+
+	if s.CARef != nil {
+		path := "/etc/dex/certs/mysql-ca.pem"
+		mounts = append(mounts, MountedSecret{
+			Namespace:  namespace,
+			SecretName: s.CARef.Name,
+			SecretKey:  s.CARef.Key,
+			MountPath:  path,
+		})
+		cfg["caFile"] = path
+	}
+
+	if s.CertRef != nil {
+		path := "/etc/dex/certs/mysql-client-cert.pem"
+		mounts = append(mounts, MountedSecret{
+			Namespace:  namespace,
+			SecretName: s.CertRef.Name,
+			SecretKey:  s.CertRef.Key,
+			MountPath:  path,
+		})
+		cfg["certFile"] = path
+	}
+
+	if s.KeyRef != nil {
+		path := "/etc/dex/certs/mysql-client-key.pem"
+		mounts = append(mounts, MountedSecret{
+			Namespace:  namespace,
+			SecretName: s.KeyRef.Name,
+			SecretKey:  s.KeyRef.Key,
+			MountPath:  path,
+		})
+		cfg["keyFile"] = path
+	}
+
+	return cfg, mounts
 }
 
 // setOptionalInt sets key in cfg only when ptr is non-nil.

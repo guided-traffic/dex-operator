@@ -97,10 +97,6 @@ spec:
                 description: ID is the connector ID used internally by Dex. Defaults
                   to metadata.name.
                 type: string
-              insecureSkipVerify:
-                description: InsecureSkipVerify skips TLS verification of the Gitea
-                  instance.
-                type: boolean
               installationRef:
                 description: InstallationRef references the DexInstallation this connector
                   belongs to.
@@ -115,32 +111,37 @@ spec:
                 - name
                 - namespace
                 type: object
+              loadAllGroups:
+                description: LoadAllGroups loads all the user's groups regardless
+                  of the orgs filter.
+                type: boolean
               orgs:
                 description: |-
                   Orgs restricts login to users who are members of at least one of the
-                  listed Gitea organizations.
+                  listed Gitea organizations (optionally filtered by team).
                 items:
-                  type: string
+                  description: GiteaOrg filters login by Gitea organization and, optionally,
+                    teams.
+                  properties:
+                    name:
+                      description: Name is the Gitea organization name (full name,
+                        not slug).
+                      type: string
+                    teams:
+                      description: |-
+                        Teams restricts login to members of at least one of the listed teams.
+                        If omitted, any member of the organization may authenticate.
+                      items:
+                        type: string
+                      type: array
+                  required:
+                  - name
+                  type: object
                 type: array
               redirectURI:
                 description: RedirectURI is the callback URL registered with the Gitea
                   OAuth2 app.
                 type: string
-              rootCARef:
-                description: |-
-                  RootCARef references the Secret key holding the CA certificate for the
-                  Gitea HTTPS endpoint.
-                properties:
-                  key:
-                    description: Key within the Secret.
-                    type: string
-                  name:
-                    description: Name of the Secret resource.
-                    type: string
-                required:
-                - key
-                - name
-                type: object
               useLoginAsID:
                 description: UseLoginAsID uses the Gitea login username as the user
                   ID.

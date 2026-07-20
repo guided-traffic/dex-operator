@@ -65,10 +65,10 @@ type DexGoogleConnectorSpec struct {
 	// +optional
 	AdminEmail string `json:"adminEmail,omitempty"`
 
-	// FetchTransitiveMembership fetches transitive group memberships when listing
-	// a user's groups.
+	// FetchTransitiveGroupMembership fetches transitive group memberships when
+	// listing a user's groups.
 	// +optional
-	FetchTransitiveMembership bool `json:"fetchTransitiveMembership,omitempty"`
+	FetchTransitiveGroupMembership bool `json:"fetchTransitiveGroupMembership,omitempty"`
 }
 
 // DexGoogleConnectorStatus defines the observed state of DexGoogleConnector.

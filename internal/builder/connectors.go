@@ -222,9 +222,6 @@ func buildSAMLConnector(c *dexv1.DexSAMLConnector) (ConnectorEntry, []MountedSec
 	if c.Spec.CARef != nil {
 		cfg["ca"] = mountCertFile(*c.Spec.CARef, c.Namespace, id, "ca", &mounts)
 	}
-	if c.Spec.CABundleRef != nil {
-		cfg["caBundle"] = mountCertFile(*c.Spec.CABundleRef, c.Namespace, id, "ca-bundle", &mounts)
-	}
 	if c.Spec.SSOIssuer != "" {
 		cfg["ssoIssuer"] = c.Spec.SSOIssuer
 	}
@@ -262,17 +259,26 @@ func buildAuthProxyConnector(c *dexv1.DexAuthProxyConnector) ConnectorEntry {
 	id := connectorID(c.Name, c.Spec.ID)
 	cfg := map[string]any{}
 
-	if c.Spec.Header != "" {
-		cfg["header"] = c.Spec.Header
+	if c.Spec.UserIDHeader != "" {
+		cfg["userIDHeader"] = c.Spec.UserIDHeader
 	}
-	if c.Spec.GetUserInfo {
-		cfg["getUserInfo"] = true
+	if c.Spec.UserHeader != "" {
+		cfg["userHeader"] = c.Spec.UserHeader
 	}
-	if len(c.Spec.Headers) > 0 {
-		cfg["headers"] = c.Spec.Headers
+	if c.Spec.UserNameHeader != "" {
+		cfg["userNameHeader"] = c.Spec.UserNameHeader
 	}
-	if c.Spec.Groups != "" {
-		cfg["groups"] = c.Spec.Groups
+	if c.Spec.EmailHeader != "" {
+		cfg["emailHeader"] = c.Spec.EmailHeader
+	}
+	if c.Spec.GroupHeader != "" {
+		cfg["groupHeader"] = c.Spec.GroupHeader
+	}
+	if c.Spec.GroupHeaderSeparator != "" {
+		cfg["groupHeaderSeparator"] = c.Spec.GroupHeaderSeparator
+	}
+	if len(c.Spec.StaticGroups) > 0 {
+		cfg["staticGroups"] = c.Spec.StaticGroups
 	}
 
 	return ConnectorEntry{Type: "authproxy", ID: id, Name: c.Spec.DisplayName, Config: cfg}

@@ -42,10 +42,6 @@ type DexSAMLConnectorSpec struct {
 	// +optional
 	CARef *SecretKeyRef `json:"caRef,omitempty"`
 
-	// CABundleRef references the Secret key holding a PEM CA bundle.
-	// +optional
-	CABundleRef *SecretKeyRef `json:"caBundleRef,omitempty"`
-
 	// SSOIssuer is the entity issuer of the IdP. Required when the IdP sends
 	// a different issuer than is configured.
 	// +optional

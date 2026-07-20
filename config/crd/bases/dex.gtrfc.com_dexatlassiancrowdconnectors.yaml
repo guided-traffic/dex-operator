@@ -58,24 +58,6 @@ spec:
               DexAtlassianCrowdConnectorSpec defines configuration for the Dex Atlassian
               Crowd connector.
             properties:
-              adminPasswordRef:
-                description: |-
-                  AdminPasswordRef references the Secret key holding the Crowd admin
-                  password.
-                properties:
-                  key:
-                    description: Key within the Secret.
-                    type: string
-                  name:
-                    description: Name of the Secret resource.
-                    type: string
-                required:
-                - key
-                - name
-                type: object
-              adminUser:
-                description: AdminUser is the Crowd admin username for directory lookups.
-                type: string
               baseURL:
                 description: |-
                   BaseURL is the base URL of the Crowd server
@@ -140,8 +122,14 @@ spec:
                 - name
                 - namespace
                 type: object
-              redirectURI:
-                description: RedirectURI is the callback URL for the Crowd connector.
+              preferredUsernameField:
+                description: |-
+                  PreferredUsernameField selects which Crowd field populates
+                  preferred_username: "key", "name" or "email".
+                type: string
+              usernamePrompt:
+                description: UsernamePrompt overrides the username label shown on
+                  the login prompt.
                 type: string
             required:
             - baseURL

@@ -100,9 +100,6 @@ func buildOneStaticClient(
 		RedirectURIs: c.Spec.RedirectURIs,
 		Public:       c.Spec.Public,
 	}
-	if len(c.Spec.AllowedScopes) > 0 {
-		sc.AllowedScopes = c.Spec.AllowedScopes
-	}
 	if len(c.Spec.TrustedPeers) > 0 {
 		sc.TrustedPeers = c.Spec.TrustedPeers
 	}

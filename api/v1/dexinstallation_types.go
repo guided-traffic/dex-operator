@@ -33,10 +33,6 @@ type DexInstallationSpec struct {
 	// +optional
 	Web *DexWebSpec `json:"web,omitempty"`
 
-	// CORS configures Cross-Origin Resource Sharing.
-	// +optional
-	CORS *DexCORSSpec `json:"cors,omitempty"`
-
 	// GRPC configures the optional gRPC API server.
 	// +optional
 	GRPC *DexGRPCSpec `json:"grpc,omitempty"`
@@ -227,13 +223,29 @@ type DexEtcdSSLSpec struct {
 
 // DexMySQLStorageSpec configures the MySQL storage backend.
 type DexMySQLStorageSpec struct {
-	// DSN is the MySQL data source name.
-	// +optional
-	DSN string `json:"dsn,omitempty"`
+	// Host is the MySQL host (host:port).
+	// +kubebuilder:validation:Required
+	Host string `json:"host"`
 
-	// DSNRef references the Secret key holding the MySQL DSN.
+	// Database is the MySQL database name.
+	// +kubebuilder:validation:Required
+	Database string `json:"database"`
+
+	// User is the MySQL user.
+	// +kubebuilder:validation:Required
+	User string `json:"user"`
+
+	// PasswordRef references the Secret key holding the MySQL password.
 	// +optional
-	DSNRef *SecretKeyRef `json:"dsnRef,omitempty"`
+	PasswordRef *SecretKeyRef `json:"passwordRef,omitempty"`
+
+	// SSL configures MySQL TLS.
+	// +optional
+	SSL *DexMySQLSSLSpec `json:"ssl,omitempty"`
+
+	// ConnectionTimeout in seconds.
+	// +optional
+	ConnectionTimeout *int `json:"connectionTimeout,omitempty"`
 
 	// MaxOpenConns limits the number of open connections.
 	// +optional
@@ -246,6 +258,25 @@ type DexMySQLStorageSpec struct {
 	// ConnMaxLifetime in seconds.
 	// +optional
 	ConnMaxLifetime *int `json:"connMaxLifetime,omitempty"`
+}
+
+// DexMySQLSSLSpec configures TLS for the MySQL storage backend.
+type DexMySQLSSLSpec struct {
+	// Mode is the MySQL SSL mode (e.g. disable, require, verify-ca, verify-identity).
+	// +optional
+	Mode string `json:"mode,omitempty"`
+
+	// CARef references the Secret key holding the CA certificate.
+	// +optional
+	CARef *SecretKeyRef `json:"caRef,omitempty"`
+
+	// CertRef references the Secret key holding the client certificate.
+	// +optional
+	CertRef *SecretKeyRef `json:"certRef,omitempty"`
+
+	// KeyRef references the Secret key holding the client private key.
+	// +optional
+	KeyRef *SecretKeyRef `json:"keyRef,omitempty"`
 }
 
 // DexWebSpec configures the Dex HTTP/HTTPS endpoints.
@@ -269,15 +300,8 @@ type DexWebSpec struct {
 	// AllowedOrigins lists origins from which cross-origin requests are allowed.
 	// +optional
 	AllowedOrigins []string `json:"allowedOrigins,omitempty"`
-}
 
-// DexCORSSpec configures CORS for the Dex web server.
-type DexCORSSpec struct {
-	// AllowedOrigins lists origins that may send cross-origin requests.
-	// +optional
-	AllowedOrigins []string `json:"allowedOrigins,omitempty"`
-
-	// AllowedHeaders lists additional headers to allow in CORS requests.
+	// AllowedHeaders lists additional headers to allow in cross-origin requests.
 	// +optional
 	AllowedHeaders []string `json:"allowedHeaders,omitempty"`
 }

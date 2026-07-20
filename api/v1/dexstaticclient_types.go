@@ -39,10 +39,6 @@ type DexStaticClientSpec struct {
 	// +kubebuilder:validation:MinItems=1
 	RedirectURIs []string `json:"redirectURIs"`
 
-	// AllowedScopes restricts which scopes the client may request.
-	// +optional
-	AllowedScopes []string `json:"allowedScopes,omitempty"`
-
 	// TrustedPeers lists other client IDs whose ID tokens this client trusts.
 	// +optional
 	TrustedPeers []string `json:"trustedPeers,omitempty"`

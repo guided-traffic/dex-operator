@@ -57,25 +57,6 @@ spec:
               DexKeystoneConnectorSpec defines configuration for the Dex Keystone
               (OpenStack Identity) connector.
             properties:
-              adminPasswordRef:
-                description: |-
-                  AdminPasswordRef references the Secret key holding the Keystone admin
-                  password.
-                properties:
-                  key:
-                    description: Key within the Secret.
-                    type: string
-                  name:
-                    description: Name of the Secret resource.
-                    type: string
-                required:
-                - key
-                - name
-                type: object
-              adminUsername:
-                description: AdminUsername is the Keystone admin username for directory
-                  lookups.
-                type: string
               displayName:
                 description: DisplayName is the human-readable connector name shown
                   on the Dex login page.
@@ -84,13 +65,6 @@ spec:
                 description: Domain restricts authentication to a specific Keystone
                   domain name.
                 type: string
-              groups:
-                description: |-
-                  Groups restricts login to users who have at least one of the listed roles
-                  in Keystone.
-                items:
-                  type: string
-                type: array
               id:
                 description: ID is the connector ID used internally by Dex. Defaults
                   to metadata.name.
@@ -109,16 +83,30 @@ spec:
                 - name
                 - namespace
                 type: object
-              keystoneAdminURL:
-                description: |-
-                  KeystoneAdminURL is the Keystone admin endpoint used for group/role
-                  lookups (e.g. https://keystone.example.com:35357).
-                type: string
               keystoneHost:
                 description: |-
                   KeystoneHost is the Keystone public endpoint
                   (e.g. https://keystone.example.com:5000).
                 format: uri
+                type: string
+              keystonePasswordRef:
+                description: |-
+                  KeystonePasswordRef references the Secret key holding the Keystone admin
+                  password.
+                properties:
+                  key:
+                    description: Key within the Secret.
+                    type: string
+                  name:
+                    description: Name of the Secret resource.
+                    type: string
+                required:
+                - key
+                - name
+                type: object
+              keystoneUsername:
+                description: KeystoneUsername is the Keystone admin username used
+                  for directory lookups.
                 type: string
             required:
             - displayName
