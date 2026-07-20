@@ -33,10 +33,6 @@ type DexInstallationSpec struct {
 	// +optional
 	Web *DexWebSpec `json:"web,omitempty"`
 
-	// CORS configures Cross-Origin Resource Sharing.
-	// +optional
-	CORS *DexCORSSpec `json:"cors,omitempty"`
-
 	// GRPC configures the optional gRPC API server.
 	// +optional
 	GRPC *DexGRPCSpec `json:"grpc,omitempty"`
@@ -269,15 +265,8 @@ type DexWebSpec struct {
 	// AllowedOrigins lists origins from which cross-origin requests are allowed.
 	// +optional
 	AllowedOrigins []string `json:"allowedOrigins,omitempty"`
-}
 
-// DexCORSSpec configures CORS for the Dex web server.
-type DexCORSSpec struct {
-	// AllowedOrigins lists origins that may send cross-origin requests.
-	// +optional
-	AllowedOrigins []string `json:"allowedOrigins,omitempty"`
-
-	// AllowedHeaders lists additional headers to allow in CORS requests.
+	// AllowedHeaders lists additional headers to allow in cross-origin requests.
 	// +optional
 	AllowedHeaders []string `json:"allowedHeaders,omitempty"`
 }
