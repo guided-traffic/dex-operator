@@ -48,23 +48,19 @@ type DexAtlassianCrowdConnectorSpec struct {
 	// +kubebuilder:validation:Required
 	ClientSecretRef SecretKeyRef `json:"clientSecretRef"`
 
-	// RedirectURI is the callback URL for the Crowd connector.
-	// +optional
-	RedirectURI string `json:"redirectURI,omitempty"`
-
 	// Groups restricts login to users who are members of at least one of the
 	// listed Crowd groups.
 	// +optional
 	Groups []string `json:"groups,omitempty"`
 
-	// AdminUser is the Crowd admin username for directory lookups.
+	// PreferredUsernameField selects which Crowd field populates
+	// preferred_username: "key", "name" or "email".
 	// +optional
-	AdminUser string `json:"adminUser,omitempty"`
+	PreferredUsernameField string `json:"preferredUsernameField,omitempty"`
 
-	// AdminPasswordRef references the Secret key holding the Crowd admin
-	// password.
+	// UsernamePrompt overrides the username label shown on the login prompt.
 	// +optional
-	AdminPasswordRef *SecretKeyRef `json:"adminPasswordRef,omitempty"`
+	UsernamePrompt string `json:"usernamePrompt,omitempty"`
 }
 
 // DexAtlassianCrowdConnectorStatus defines the observed state of

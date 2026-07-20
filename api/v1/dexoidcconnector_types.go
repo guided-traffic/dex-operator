@@ -100,11 +100,6 @@ type DexOIDCConnectorSpec struct {
 	// +optional
 	ACRValues []string `json:"acrValues,omitempty"`
 
-	// DiscoveryPollInterval overrides how often the discovery document is
-	// refreshed (Go duration string, e.g. "30m").
-	// +optional
-	DiscoveryPollInterval string `json:"discoveryPollInterval,omitempty"`
-
 	// RootCARef references the Secret key holding a CA bundle for the upstream
 	// IdP's HTTPS endpoint.
 	// +optional

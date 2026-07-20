@@ -68,11 +68,19 @@ spec:
                   email:
                     description: Email maps a provider claim to the email claim.
                     type: string
+                  emailVerified:
+                    description: EmailVerified maps a provider claim to the email_verified
+                      claim.
+                    type: string
                   groups:
                     description: Groups maps a provider claim to the groups claim.
                     type: string
                   preferredUsername:
                     description: PreferredUsername maps a provider claim to preferred_username.
+                    type: string
+                  userName:
+                    description: UserName maps a provider claim to the username. Defaults
+                      to "user_name".
                     type: string
                 type: object
               clientIDRef:
@@ -108,17 +116,13 @@ spec:
                 description: DisplayName is the human-readable connector name shown
                   on the Dex login page.
                 type: string
-              headerPrefix:
-                description: HeaderPrefix is prepended to the Authorization header
-                  value.
-                type: string
               id:
                 description: ID is the connector ID used internally by Dex. Defaults
                   to metadata.name.
                 type: string
-              insecureTrustEmail:
-                description: InsecureTrustEmail trusts the email claim without verifying
-                  email_verified.
+              insecureSkipVerify:
+                description: InsecureSkipVerify disables TLS certificate verification
+                  of the provider.
                 type: boolean
               installationRef:
                 description: InstallationRef references the DexInstallation this connector
@@ -160,6 +164,10 @@ spec:
               tokenURL:
                 description: TokenURL is the provider's token endpoint.
                 format: uri
+                type: string
+              userIDKey:
+                description: UserIDKey is the claim used as the user ID. Defaults
+                  to "id".
                 type: string
               userInfoURL:
                 description: UserInfoURL is the optional provider's user info endpoint.

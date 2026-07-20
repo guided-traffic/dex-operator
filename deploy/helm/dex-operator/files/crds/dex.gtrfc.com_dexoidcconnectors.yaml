@@ -107,11 +107,6 @@ spec:
                 - key
                 - name
                 type: object
-              discoveryPollInterval:
-                description: |-
-                  DiscoveryPollInterval overrides how often the discovery document is
-                  refreshed (Go duration string, e.g. "30m").
-                type: string
               displayName:
                 description: DisplayName is the human-readable connector name shown
                   on the Dex login page.

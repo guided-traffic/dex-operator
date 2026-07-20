@@ -34,23 +34,39 @@ type DexAuthProxyConnectorSpec struct {
 	// +kubebuilder:validation:Required
 	DisplayName string `json:"displayName"`
 
-	// Header is the HTTP header from which the user identity is read.
+	// UserIDHeader is the HTTP header carrying the user's unique ID.
+	// Defaults to X-Remote-User-ID.
+	// +optional
+	UserIDHeader string `json:"userIDHeader,omitempty"`
+
+	// UserHeader is the HTTP header carrying the username.
 	// Defaults to X-Remote-User.
-	// +kubebuilder:default="X-Remote-User"
 	// +optional
-	Header string `json:"header,omitempty"`
+	UserHeader string `json:"userHeader,omitempty"`
 
-	// GetUserInfo fetches additional user information from the reverse proxy.
+	// UserNameHeader is the HTTP header carrying the user's display name.
+	// Defaults to X-Remote-User-Display-Name.
 	// +optional
-	GetUserInfo bool `json:"getUserInfo,omitempty"`
+	UserNameHeader string `json:"userNameHeader,omitempty"`
 
-	// Headers maps additional HTTP response headers to token claims.
+	// EmailHeader is the HTTP header carrying the user's email.
+	// Defaults to X-Remote-User-Email.
 	// +optional
-	Headers map[string]string `json:"headers,omitempty"`
+	EmailHeader string `json:"emailHeader,omitempty"`
 
-	// Groups is the HTTP header from which group membership is read.
+	// GroupHeader is the HTTP header carrying the user's groups.
+	// Defaults to X-Remote-Group.
 	// +optional
-	Groups string `json:"groups,omitempty"`
+	GroupHeader string `json:"groupHeader,omitempty"`
+
+	// GroupHeaderSeparator splits the group header value into multiple groups.
+	// +optional
+	GroupHeaderSeparator string `json:"groupHeaderSeparator,omitempty"`
+
+	// StaticGroups are groups added to every user authenticated via this
+	// connector.
+	// +optional
+	StaticGroups []string `json:"staticGroups,omitempty"`
 }
 
 // DexAuthProxyConnectorStatus defines the observed state of

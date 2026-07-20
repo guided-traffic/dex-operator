@@ -52,22 +52,29 @@ type DexGiteaConnectorSpec struct {
 	RedirectURI string `json:"redirectURI,omitempty"`
 
 	// Orgs restricts login to users who are members of at least one of the
-	// listed Gitea organizations.
+	// listed Gitea organizations (optionally filtered by team).
 	// +optional
-	Orgs []string `json:"orgs,omitempty"`
+	Orgs []GiteaOrg `json:"orgs,omitempty"`
+
+	// LoadAllGroups loads all the user's groups regardless of the orgs filter.
+	// +optional
+	LoadAllGroups bool `json:"loadAllGroups,omitempty"`
 
 	// UseLoginAsID uses the Gitea login username as the user ID.
 	// +optional
 	UseLoginAsID bool `json:"useLoginAsID,omitempty"`
+}
 
-	// InsecureSkipVerify skips TLS verification of the Gitea instance.
-	// +optional
-	InsecureSkipVerify bool `json:"insecureSkipVerify,omitempty"`
+// GiteaOrg filters login by Gitea organization and, optionally, teams.
+type GiteaOrg struct {
+	// Name is the Gitea organization name (full name, not slug).
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
 
-	// RootCARef references the Secret key holding the CA certificate for the
-	// Gitea HTTPS endpoint.
+	// Teams restricts login to members of at least one of the listed teams.
+	// If omitted, any member of the organization may authenticate.
 	// +optional
-	RootCARef *SecretKeyRef `json:"rootCARef,omitempty"`
+	Teams []string `json:"teams,omitempty"`
 }
 
 // DexGiteaConnectorStatus defines the observed state of DexGiteaConnector.

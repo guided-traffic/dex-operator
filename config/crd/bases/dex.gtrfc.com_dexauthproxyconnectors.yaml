@@ -62,26 +62,20 @@ spec:
                 description: DisplayName is the human-readable connector name shown
                   on the Dex login page.
                 type: string
-              getUserInfo:
-                description: GetUserInfo fetches additional user information from
-                  the reverse proxy.
-                type: boolean
-              groups:
-                description: Groups is the HTTP header from which group membership
-                  is read.
-                type: string
-              header:
-                default: X-Remote-User
+              emailHeader:
                 description: |-
-                  Header is the HTTP header from which the user identity is read.
-                  Defaults to X-Remote-User.
+                  EmailHeader is the HTTP header carrying the user's email.
+                  Defaults to X-Remote-User-Email.
                 type: string
-              headers:
-                additionalProperties:
-                  type: string
-                description: Headers maps additional HTTP response headers to token
-                  claims.
-                type: object
+              groupHeader:
+                description: |-
+                  GroupHeader is the HTTP header carrying the user's groups.
+                  Defaults to X-Remote-Group.
+                type: string
+              groupHeaderSeparator:
+                description: GroupHeaderSeparator splits the group header value into
+                  multiple groups.
+                type: string
               id:
                 description: ID is the connector ID used internally by Dex. Defaults
                   to metadata.name.
@@ -100,6 +94,28 @@ spec:
                 - name
                 - namespace
                 type: object
+              staticGroups:
+                description: |-
+                  StaticGroups are groups added to every user authenticated via this
+                  connector.
+                items:
+                  type: string
+                type: array
+              userHeader:
+                description: |-
+                  UserHeader is the HTTP header carrying the username.
+                  Defaults to X-Remote-User.
+                type: string
+              userIDHeader:
+                description: |-
+                  UserIDHeader is the HTTP header carrying the user's unique ID.
+                  Defaults to X-Remote-User-ID.
+                type: string
+              userNameHeader:
+                description: |-
+                  UserNameHeader is the HTTP header carrying the user's display name.
+                  Defaults to X-Remote-User-Display-Name.
+                type: string
             required:
             - displayName
             - installationRef

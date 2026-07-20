@@ -109,11 +109,10 @@ type ConnectorEntry struct {
 
 // StaticClient represents a statically configured OAuth2 client in Dex.
 type StaticClient struct {
-	ID            string   `yaml:"id"`
-	SecretEnv     string   `yaml:"secretEnv,omitempty"`
-	Name          string   `yaml:"name,omitempty"`
-	RedirectURIs  []string `yaml:"redirectURIs,omitempty"`
-	AllowedScopes []string `yaml:"allowedScopes,omitempty"`
-	TrustedPeers  []string `yaml:"trustedPeers,omitempty"`
-	Public        bool     `yaml:"public,omitempty"`
+	ID           string   `yaml:"id"`
+	SecretEnv    string   `yaml:"secretEnv,omitempty"`
+	Name         string   `yaml:"name,omitempty"`
+	RedirectURIs []string `yaml:"redirectURIs,omitempty"`
+	TrustedPeers []string `yaml:"trustedPeers,omitempty"`
+	Public       bool     `yaml:"public,omitempty"`
 }

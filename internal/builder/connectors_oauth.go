@@ -357,8 +357,8 @@ func buildGoogleConnector(
 	if c.Spec.AdminEmail != "" {
 		cfg["adminEmail"] = c.Spec.AdminEmail
 	}
-	if c.Spec.FetchTransitiveMembership {
-		cfg["fetchTransitiveMembership"] = true
+	if c.Spec.FetchTransitiveGroupMembership {
+		cfg["fetchTransitiveGroupMembership"] = true
 	}
 
 	var mounts []MountedSecret
@@ -462,7 +462,8 @@ func buildOIDCConnector(
 
 	var mounts []MountedSecret
 	if c.Spec.RootCARef != nil {
-		cfg["rootCA"] = mountCertFile(*c.Spec.RootCARef, c.Namespace, id, "root-ca", &mounts)
+		path := mountCertFile(*c.Spec.RootCARef, c.Namespace, id, "root-ca", &mounts)
+		cfg["rootCAs"] = []string{path}
 	}
 
 	if c.Spec.ClaimMapping != nil {
@@ -508,9 +509,6 @@ func applyOIDCOptionalFields(cfg map[string]any, spec dexv1.DexOIDCConnectorSpec
 	}
 	if len(spec.ACRValues) > 0 {
 		cfg["acrValues"] = spec.ACRValues
-	}
-	if spec.DiscoveryPollInterval != "" {
-		cfg["discoveryPollInterval"] = spec.DiscoveryPollInterval
 	}
 }
 
@@ -558,11 +556,11 @@ func buildOAuth2Connector(
 	if len(c.Spec.Scopes) > 0 {
 		cfg["scopes"] = c.Spec.Scopes
 	}
-	if c.Spec.HeaderPrefix != "" {
-		cfg["headerPrefix"] = c.Spec.HeaderPrefix
+	if c.Spec.InsecureSkipVerify {
+		cfg["insecureSkipVerify"] = true
 	}
-	if c.Spec.InsecureTrustEmail {
-		cfg["insecureTrustEmail"] = true
+	if c.Spec.UserIDKey != "" {
+		cfg["userIDKey"] = c.Spec.UserIDKey
 	}
 	if c.Spec.ClaimMapping != nil {
 		cfg["claimMapping"] = buildOAuth2ClaimMapping(*c.Spec.ClaimMapping)
@@ -570,7 +568,8 @@ func buildOAuth2Connector(
 
 	var mounts []MountedSecret
 	if c.Spec.RootCARef != nil {
-		cfg["rootCA"] = mountCertFile(*c.Spec.RootCARef, c.Namespace, id, "root-ca", &mounts)
+		path := mountCertFile(*c.Spec.RootCARef, c.Namespace, id, "root-ca", &mounts)
+		cfg["rootCAs"] = []string{path}
 	}
 
 	return ConnectorEntry{Type: "oauth", ID: id, Name: c.Spec.DisplayName, Config: cfg}, mounts, nil
@@ -578,14 +577,20 @@ func buildOAuth2Connector(
 
 func buildOAuth2ClaimMapping(m dexv1.OAuth2ClaimMapping) map[string]any {
 	cfg := map[string]any{}
+	if m.UserName != "" {
+		cfg["userNameKey"] = m.UserName
+	}
 	if m.PreferredUsername != "" {
-		cfg["preferred_username"] = m.PreferredUsername
+		cfg["preferredUsernameKey"] = m.PreferredUsername
 	}
 	if m.Email != "" {
-		cfg["email"] = m.Email
+		cfg["emailKey"] = m.Email
+	}
+	if m.EmailVerified != "" {
+		cfg["emailVerifiedKey"] = m.EmailVerified
 	}
 	if m.Groups != "" {
-		cfg["groups"] = m.Groups
+		cfg["groupsKey"] = m.Groups
 	}
 	return cfg
 }
@@ -649,22 +654,14 @@ func buildAtlassianCrowdConnector(
 		"clientSecret": csRef,
 	}
 
-	if c.Spec.RedirectURI != "" {
-		cfg["redirectURI"] = c.Spec.RedirectURI
-	}
 	if len(c.Spec.Groups) > 0 {
 		cfg["groups"] = c.Spec.Groups
 	}
-	if c.Spec.AdminUser != "" {
-		cfg["adminUser"] = c.Spec.AdminUser
+	if c.Spec.PreferredUsernameField != "" {
+		cfg["preferredUsernameField"] = c.Spec.PreferredUsernameField
 	}
-	if c.Spec.AdminPasswordRef != nil {
-		pwKey := connectorEnvKey("crowd", id, "ADMIN_PASSWORD")
-		pwRef, err := resolveEnvSecret(ctx, c.Namespace, *c.Spec.AdminPasswordRef, pwKey, sr, envs)
-		if err != nil {
-			return ConnectorEntry{}, nil, fmt.Errorf("adminPassword: %w", err)
-		}
-		cfg["adminPassword"] = pwRef
+	if c.Spec.UsernamePrompt != "" {
+		cfg["usernamePrompt"] = c.Spec.UsernamePrompt
 	}
 
 	return ConnectorEntry{Type: "atlassian-crowd", ID: id, Name: c.Spec.DisplayName, Config: cfg}, nil, nil
@@ -672,6 +669,7 @@ func buildAtlassianCrowdConnector(
 
 // ── Gitea ─────────────────────────────────────────────────────────────────────
 
+//nolint:unparam // []MountedSecret return kept for API consistency with connectors that do mount files
 func buildGiteaConnector(
 	ctx context.Context,
 	c *dexv1.DexGiteaConnector,
@@ -694,21 +692,28 @@ func buildGiteaConnector(
 		cfg["redirectURI"] = c.Spec.RedirectURI
 	}
 	if len(c.Spec.Orgs) > 0 {
-		cfg["orgs"] = c.Spec.Orgs
+		cfg["orgs"] = buildGiteaOrgs(c.Spec.Orgs)
+	}
+	if c.Spec.LoadAllGroups {
+		cfg["loadAllGroups"] = true
 	}
 	if c.Spec.UseLoginAsID {
 		cfg["useLoginAsID"] = true
 	}
-	if c.Spec.InsecureSkipVerify {
-		cfg["insecureSkipVerify"] = true
-	}
 
-	var mounts []MountedSecret
-	if c.Spec.RootCARef != nil {
-		cfg["rootCA"] = mountCertFile(*c.Spec.RootCARef, c.Namespace, id, "root-ca", &mounts)
-	}
+	return ConnectorEntry{Type: "gitea", ID: id, Name: c.Spec.DisplayName, Config: cfg}, nil, nil
+}
 
-	return ConnectorEntry{Type: "gitea", ID: id, Name: c.Spec.DisplayName, Config: cfg}, mounts, nil
+func buildGiteaOrgs(orgs []dexv1.GiteaOrg) []map[string]any {
+	result := make([]map[string]any, 0, len(orgs))
+	for _, o := range orgs {
+		entry := map[string]any{"name": o.Name}
+		if len(o.Teams) > 0 {
+			entry["teams"] = o.Teams
+		}
+		result = append(result, entry)
+	}
+	return result
 }
 
 // ── Bitbucket ─────────────────────────────────────────────────────────────────
@@ -755,25 +760,19 @@ func buildKeystoneConnector(
 		"keystoneHost": c.Spec.KeystoneHost,
 	}
 
-	if c.Spec.KeystoneAdminURL != "" {
-		cfg["keystoneAdminURL"] = c.Spec.KeystoneAdminURL
-	}
 	if c.Spec.Domain != "" {
 		cfg["domain"] = c.Spec.Domain
 	}
-	if c.Spec.AdminUsername != "" {
-		cfg["adminUsername"] = c.Spec.AdminUsername
+	if c.Spec.KeystoneUsername != "" {
+		cfg["keystoneUsername"] = c.Spec.KeystoneUsername
 	}
-	if c.Spec.AdminPasswordRef != nil {
-		pwKey := connectorEnvKey("keystone", id, "ADMIN_PASSWORD")
-		pwRef, err := resolveEnvSecret(ctx, c.Namespace, *c.Spec.AdminPasswordRef, pwKey, sr, envs)
+	if c.Spec.KeystonePasswordRef != nil {
+		pwKey := connectorEnvKey("keystone", id, "PASSWORD")
+		pwRef, err := resolveEnvSecret(ctx, c.Namespace, *c.Spec.KeystonePasswordRef, pwKey, sr, envs)
 		if err != nil {
-			return ConnectorEntry{}, nil, fmt.Errorf("adminPassword: %w", err)
+			return ConnectorEntry{}, nil, fmt.Errorf("keystonePassword: %w", err)
 		}
-		cfg["adminPassword"] = pwRef
-	}
-	if len(c.Spec.Groups) > 0 {
-		cfg["groups"] = c.Spec.Groups
+		cfg["keystonePassword"] = pwRef
 	}
 
 	return ConnectorEntry{Type: "keystone", ID: id, Name: c.Spec.DisplayName, Config: cfg}, nil, nil

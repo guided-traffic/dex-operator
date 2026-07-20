@@ -52,7 +52,7 @@ func (c *DexSAMLConnector) GetCommonStatus() *CommonStatus { return &c.Status.Co
 
 // GetReferencedSecretNames implements ChildObject.
 func (c *DexSAMLConnector) GetReferencedSecretNames() []string {
-	return collectSecretNames(c.Spec.CARef, c.Spec.CABundleRef)
+	return collectSecretNames(c.Spec.CARef)
 }
 
 // ─── DexGitLabConnector ───────────────────────────────────────────────────────
@@ -203,7 +203,7 @@ func (c *DexAtlassianCrowdConnector) GetCommonStatus() *CommonStatus {
 
 // GetReferencedSecretNames implements ChildObject.
 func (c *DexAtlassianCrowdConnector) GetReferencedSecretNames() []string {
-	return collectSecretNames(&c.Spec.ClientIDRef, &c.Spec.ClientSecretRef, c.Spec.AdminPasswordRef)
+	return collectSecretNames(&c.Spec.ClientIDRef, &c.Spec.ClientSecretRef)
 }
 
 // ─── DexGiteaConnector ────────────────────────────────────────────────────────
@@ -216,7 +216,7 @@ func (c *DexGiteaConnector) GetCommonStatus() *CommonStatus { return &c.Status.C
 
 // GetReferencedSecretNames implements ChildObject.
 func (c *DexGiteaConnector) GetReferencedSecretNames() []string {
-	return collectSecretNames(&c.Spec.ClientIDRef, &c.Spec.ClientSecretRef, c.Spec.RootCARef)
+	return collectSecretNames(&c.Spec.ClientIDRef, &c.Spec.ClientSecretRef)
 }
 
 // ─── DexKeystoneConnector ─────────────────────────────────────────────────────
@@ -231,7 +231,7 @@ func (c *DexKeystoneConnector) GetCommonStatus() *CommonStatus { return &c.Statu
 
 // GetReferencedSecretNames implements ChildObject.
 func (c *DexKeystoneConnector) GetReferencedSecretNames() []string {
-	return collectSecretNames(c.Spec.AdminPasswordRef)
+	return collectSecretNames(c.Spec.KeystonePasswordRef)
 }
 
 // ─── DexStaticClient ──────────────────────────────────────────────────────────
