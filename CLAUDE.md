@@ -2,7 +2,7 @@
 
 Ein Kubernetes Operator (Go 1.26, controller-runtime) der die Konfiguration von Dex dynamisch aus Custom Resources zusammenbaut.
 Dex wird weiterhin über das offizielle Dex Helm Chart installiert. Der Operator erzeugt zwei Secrets im Namespace der Dex-Installation:
-1. **Config-Secret** — Enthält die vollständige Dex-Konfiguration als YAML (Issuer, Storage, Web, CORS, gRPC, Logger, Expiry, Connectors, Static Clients)
+1. **Config-Secret** — Enthält die vollständige Dex-Konfiguration als YAML (Issuer, Storage, Web, gRPC, Logger, Expiry, Connectors, Static Clients)
 2. **Env-Secret** — Enthält alle Client-Secrets als Env-Variablen (z.B. `GRAFANA_CLIENT_SECRET`), wird per `envFrom` an den Dex-Container gehängt und in der Config per `secretEnv` referenziert
 
 ## API Group
@@ -11,11 +11,11 @@ Dex wird weiterhin über das offizielle Dex Helm Chart installiert. Der Operator
 ## CRDs (alle namespace-scoped)
 
 ### DexInstallation
-Vollständige globale Dex-Konfiguration: Issuer, Storage, Web, CORS, gRPC, Logger, Expiry.
+Vollständige globale Dex-Konfiguration: Issuer, Storage, Web (inkl. CORS `allowedOrigins`/`allowedHeaders`), gRPC, Logger, Expiry.
 Zusätzlich: `configSecretName`, `envSecretName`, `allowedNamespaces` (Whitelist, `"*"` = alle), optionaler Auto-Restart (`rolloutRestart.enabled`, `rolloutRestart.deploymentName`).
 
 ### DexStaticClient
-Referenziert eine DexInstallation per Name+Namespace. Enthält `redirectURIs`, `allowedScopes`, `trustedPeers`, `name`.
+Referenziert eine DexInstallation per Name+Namespace. Enthält `redirectURIs`, `trustedPeers`, `name`.
 Referenziert ein bestehendes Secret im gleichen Namespace per `secretRef` mit Keys für `client-id` und `client-secret`.
 
 ### Connector CRDs (je eine eigene CRD pro Typ)

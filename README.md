@@ -4,7 +4,7 @@ A Kubernetes Operator (Go, controller-runtime) that dynamically assembles [Dex](
 
 Dex is installed separately via the official [Dex Helm Chart](https://github.com/dexidp/helm-charts). The operator watches for Custom Resources and generates two Secrets in the Dex namespace:
 
-- **Config-Secret** — Full Dex configuration as YAML (Issuer, Storage, Web, CORS, gRPC, Logger, Expiry, Connectors, Static Clients)
+- **Config-Secret** — Full Dex configuration as YAML (Issuer, Storage, Web, gRPC, Logger, Expiry, Connectors, Static Clients)
 - **Env-Secret** — All client secrets as environment variables (e.g. `GRAFANA_CLIENT_SECRET`), attached to the Dex container via `envFrom` and referenced in the config via `secretEnv`
 
 ## Installation
@@ -80,7 +80,7 @@ helm uninstall dex-operator --namespace dex-operator-system
 
 | CRD | Description |
 |-----|-------------|
-| `DexInstallation` | Global Dex config: Issuer, Storage, Web, CORS, gRPC, Logger, Expiry. Defines allowed namespaces and optional auto-restart. |
+| `DexInstallation` | Global Dex config: Issuer, Storage, Web, gRPC, Logger, Expiry. Defines allowed namespaces and optional auto-restart. |
 | `DexStaticClient` | OAuth2 static client referencing a `DexInstallation` and an existing Secret for client-id / client-secret. |
 | `DexLDAPConnector` | LDAP identity provider connector |
 | `DexGitHubConnector` | GitHub identity provider connector |
@@ -117,6 +117,12 @@ spec:
     type: kubernetes
   web:
     http: 0.0.0.0:5556
+    # CORS: origins/headers live directly under web (Dex has no separate cors block)
+    allowedOrigins:
+      - https://grafana.example.com
+      - https://app.example.com
+    allowedHeaders:
+      - Authorization
   logger:
     level: info
     format: json
@@ -167,11 +173,6 @@ spec:
     clientSecretKey: client-secret
   redirectURIs:
     - https://grafana.example.com/login/generic_oauth
-  allowedScopes:
-    - openid
-    - profile
-    - email
-    - groups
 ```
 
 ### DexLDAPConnector
