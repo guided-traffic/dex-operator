@@ -195,12 +195,17 @@
       ]
     },
     {
-      "description": "Enable updates for indirect Go module dependencies (off by default) so vulnerable transitive deps like golang.org/x/net get patched",
+      "description": "Enable non-major updates for indirect Go module dependencies (off by default) so vulnerable transitive deps like golang.org/x/net get patched. Major updates stay disabled: a transitive dep's next major is a different module path that parent deps (controller-runtime, k8s) still pin to the old major, so the bump can never build and Renovate would rebase it forever.",
       "matchManagers": [
         "gomod"
       ],
       "matchDepTypes": [
         "indirect"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest"
       ],
       "enabled": true
     },
