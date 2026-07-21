@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -63,9 +64,18 @@ func SecretRefIndexFunc(obj client.Object) []string {
 	return child.GetReferencedSecretNames()
 }
 
-// filterItems retains only items whose namespace appears in allowed.
+// filterItems retains only items whose namespace appears in allowed and
+// returns them in a deterministic order (sorted by namespace, then name).
 // T is the value type; PT is the pointer type that implements client.Object.
 // An empty allowed list denies all; "*" allows all.
+//
+// The deterministic ordering is essential: the cache-backed List used by the
+// callers returns items in non-deterministic map-iteration order. Without a
+// stable sort the generated Dex config YAML reorders its staticClients and
+// connectors lists on every reconcile. The semantic-YAML change detection
+// (reflect.DeepEqual, which is order-sensitive on lists) then reports a change
+// on every reconcile, triggering an endless rollout-restart loop of the Dex
+// Deployment.
 func filterItems[T any, PT interface {
 	*T
 	client.Object
@@ -73,16 +83,37 @@ func filterItems[T any, PT interface {
 	if len(allowed) == 0 {
 		return nil
 	}
+
+	var result []T
 	if len(allowed) == 1 && allowed[0] == "*" {
-		return items
-	}
-	result := make([]T, 0, len(items))
-	for i := range items {
-		if isNamespaceAllowed(PT(&items[i]).GetNamespace(), allowed) {
-			result = append(result, items[i])
+		result = items
+	} else {
+		result = make([]T, 0, len(items))
+		for i := range items {
+			if isNamespaceAllowed(PT(&items[i]).GetNamespace(), allowed) {
+				result = append(result, items[i])
+			}
 		}
 	}
+
+	sortByNamespaceName[T, PT](result)
 	return result
+}
+
+// sortByNamespaceName sorts items in place by namespace, then name, giving the
+// builder a deterministic input order regardless of the order in which the
+// cache-backed List returned them. See [filterItems] for why this matters.
+func sortByNamespaceName[T any, PT interface {
+	*T
+	client.Object
+}](items []T) {
+	sort.Slice(items, func(i, j int) bool {
+		a, b := PT(&items[i]), PT(&items[j])
+		if ns := a.GetNamespace(); ns != b.GetNamespace() {
+			return ns < b.GetNamespace()
+		}
+		return a.GetName() < b.GetName()
+	})
 }
 
 // connectorCollector collects all connector types for a DexInstallation.
