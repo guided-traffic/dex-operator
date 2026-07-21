@@ -22,6 +22,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	dexv1 "github.com/guided-traffic/dex-operator/api/v1"
 )
 
 // IsNamespaceAllowed exposes [isNamespaceAllowed] for white-box testing.
@@ -57,4 +59,10 @@ func (r *DexInstallationReconciler) MapSecretToInstallation(ctx context.Context,
 // SecretWatchPredicate exposes [secretWatchPredicate] for white-box testing.
 func SecretWatchPredicate() predicate.Predicate {
 	return secretWatchPredicate()
+}
+
+// FilterStaticClients exposes [filterItems] instantiated for DexStaticClient
+// for white-box testing of the deterministic ordering guarantee.
+func FilterStaticClients(items []dexv1.DexStaticClient, allowed []string) []dexv1.DexStaticClient {
+	return filterItems[dexv1.DexStaticClient, *dexv1.DexStaticClient](items, allowed)
 }
