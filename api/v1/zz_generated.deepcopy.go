@@ -2199,7 +2199,11 @@ func (in *DexStaticClientList) DeepCopyObject() runtime.Object {
 func (in *DexStaticClientSpec) DeepCopyInto(out *DexStaticClientSpec) {
 	*out = *in
 	out.InstallationRef = in.InstallationRef
-	out.SecretRef = in.SecretRef
+	if in.SecretRef != nil {
+		in, out := &in.SecretRef, &out.SecretRef
+		*out = new(StaticClientSecretRef)
+		**out = **in
+	}
 	if in.RedirectURIs != nil {
 		in, out := &in.RedirectURIs, &out.RedirectURIs
 		*out = make([]string, len(*in))

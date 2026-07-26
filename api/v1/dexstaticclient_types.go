@@ -19,25 +19,42 @@ package v1
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 // DexStaticClientSpec defines the desired state of a Dex static OAuth2 client.
+//
+// A client is either confidential (client-id and client-secret sourced from a
+// Kubernetes Secret via secretRef) or public/secretless (client-id set inline
+// via clientID, no secret at all).  Public clients may still use secretRef if
+// they need a secret in addition to PKCE.
+//
+// +kubebuilder:validation:XValidation:rule="has(self.clientID) != has(self.secretRef)",message="exactly one of clientID or secretRef must be set"
+// +kubebuilder:validation:XValidation:rule="(has(self.public) && self.public) || has(self.secretRef)",message="secretRef is required for confidential (non-public) clients"
+// +kubebuilder:validation:XValidation:rule="(has(self.public) && self.public) || (has(self.redirectURIs) && self.redirectURIs.size() > 0)",message="redirectURIs is required for confidential (non-public) clients"
 type DexStaticClientSpec struct {
 	// InstallationRef references the DexInstallation this client belongs to.
 	// +kubebuilder:validation:Required
 	InstallationRef InstallationRef `json:"installationRef"`
 
+	// ClientID is the OAuth2 client ID, set inline.  Mutually exclusive with
+	// secretRef and intended for public (secretless) clients, whose ID is not
+	// confidential.
+	// +optional
+	ClientID string `json:"clientID,omitempty"`
+
 	// SecretRef references the existing Secret that contains the client-id
-	// and client-secret for this client.
-	// +kubebuilder:validation:Required
-	SecretRef StaticClientSecretRef `json:"secretRef"`
+	// and client-secret for this client.  Required for confidential clients,
+	// mutually exclusive with clientID.
+	// +optional
+	SecretRef *StaticClientSecretRef `json:"secretRef,omitempty"`
 
 	// DisplayName is the human-readable display name of the client shown on the
 	// Dex approval screen.
 	// +kubebuilder:validation:Required
 	DisplayName string `json:"displayName"`
 
-	// RedirectURIs is the list of allowed redirect URIs.
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinItems=1
-	RedirectURIs []string `json:"redirectURIs"`
+	// RedirectURIs is the list of allowed redirect URIs.  Required for
+	// confidential clients.  A public client may leave it empty, in which case
+	// Dex accepts its loopback, OOB and device-flow defaults.
+	// +optional
+	RedirectURIs []string `json:"redirectURIs,omitempty"`
 
 	// TrustedPeers lists other client IDs whose ID tokens this client trusts.
 	// +optional

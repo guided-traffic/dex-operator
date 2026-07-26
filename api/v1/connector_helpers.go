@@ -244,7 +244,7 @@ func (c *DexStaticClient) GetCommonStatus() *CommonStatus { return &c.Status.Com
 
 // GetReferencedSecretNames implements ChildObject.
 func (c *DexStaticClient) GetReferencedSecretNames() []string {
-	if c.Spec.SecretRef.Name != "" {
+	if c.Spec.SecretRef != nil && c.Spec.SecretRef.Name != "" {
 		return []string{c.Spec.SecretRef.Name}
 	}
 	return nil

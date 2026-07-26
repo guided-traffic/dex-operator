@@ -546,7 +546,7 @@ func TestBuild_StaticClient(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "grafana", Namespace: "ns"},
 			Spec: dexv1.DexStaticClientSpec{
 				InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
-				SecretRef: dexv1.StaticClientSecretRef{
+				SecretRef: &dexv1.StaticClientSecretRef{
 					Name:            "grafana-oidc",
 					ClientIDKey:     "client-id",
 					ClientSecretKey: "client-secret",
@@ -600,7 +600,7 @@ func TestBuild_StaticClient_DisplayName(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "pgadmin", Namespace: "ns"},
 			Spec: dexv1.DexStaticClientSpec{
 				InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
-				SecretRef: dexv1.StaticClientSecretRef{
+				SecretRef: &dexv1.StaticClientSecretRef{
 					Name:            "pgadmin-oidc",
 					ClientIDKey:     "client-id",
 					ClientSecretKey: "client-secret",
@@ -631,6 +631,144 @@ func TestBuild_StaticClient_DisplayName(t *testing.T) {
 	if sc["name"] != "PgAdmin 4" {
 		t.Errorf("staticClient name = %v, want PgAdmin 4", sc["name"])
 	}
+}
+
+// ── Build: public (secretless) static clients ─────────────────────────────────
+
+// secretlessClient returns a public DexStaticClient that carries its id inline
+// and references no Secret at all.
+func secretlessClient(name, clientID string, redirectURIs []string) dexv1.DexStaticClient {
+	return dexv1.DexStaticClient{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "ns"},
+		Spec: dexv1.DexStaticClientSpec{
+			InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
+			ClientID:        clientID,
+			DisplayName:     "My CLI",
+			RedirectURIs:    redirectURIs,
+			Public:          true,
+		},
+	}
+}
+
+// buildStaticClients builds clients against a minimal installation and returns
+// the parsed output plus the first emitted staticClients entry.
+func buildStaticClients(
+	t *testing.T,
+	clients []dexv1.DexStaticClient,
+	secrets map[string]string,
+) (builder.Output, []any) {
+	t.Helper()
+	out, err := builder.Build(context.Background(), builder.Input{
+		Installation:  minimalInstallation("ns"),
+		StaticClients: clients,
+		Secrets:       mockResolver(secrets),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	m := parseYAML(t, out.ConfigYAML)
+	scs, ok := m["staticClients"].([]any)
+	if !ok || len(scs) == 0 {
+		t.Fatalf("no staticClients emitted: %v", m["staticClients"])
+	}
+	return out, scs
+}
+
+func TestBuild_StaticClient_PublicSecretless(t *testing.T) {
+	out, scs := buildStaticClients(t, []dexv1.DexStaticClient{
+		secretlessClient("my-cli", "my-cli-id", []string{"http://127.0.0.1:8085/callback"}),
+	}, nil)
+
+	sc := scs[0].(map[string]any)
+	if sc["id"] != "my-cli-id" {
+		t.Errorf("staticClient id = %v, want my-cli-id", sc["id"])
+	}
+	if sc["public"] != true {
+		t.Errorf("staticClient public = %v, want true", sc["public"])
+	}
+	// Dex must not see a secretEnv pointing at a non-existent env var.
+	assertNoKeys(t, sc, "secretEnv", "secret")
+
+	if len(out.EnvSecretData) != 0 {
+		t.Errorf("EnvSecretData = %v, want empty", out.EnvSecretData)
+	}
+}
+
+func TestBuild_StaticClient_PublicSecretless_NoRedirectURIs(t *testing.T) {
+	_, scs := buildStaticClients(t, []dexv1.DexStaticClient{
+		secretlessClient("my-cli", "my-cli-id", nil),
+	}, nil)
+
+	// An omitted redirectURIs key makes Dex fall back to its loopback / OOB /
+	// device-flow defaults for public clients.
+	assertNoKeys(t, scs[0].(map[string]any), "redirectURIs")
+}
+
+func TestBuild_StaticClient_PublicWithSecretRef(t *testing.T) {
+	clients := []dexv1.DexStaticClient{{
+		ObjectMeta: metav1.ObjectMeta{Name: "grafana", Namespace: "ns"},
+		Spec: dexv1.DexStaticClientSpec{
+			InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
+			SecretRef:       &dexv1.StaticClientSecretRef{Name: "grafana-oidc"},
+			DisplayName:     "Grafana",
+			RedirectURIs:    []string{"https://grafana.example.com/login/generic_oauth"},
+			Public:          true,
+		},
+	}}
+	secrets := map[string]string{
+		"ns/grafana-oidc[client-id]":     "grafana",
+		"ns/grafana-oidc[client-secret]": "verysecret",
+	}
+
+	out, scs := buildStaticClients(t, clients, secrets)
+
+	sc := scs[0].(map[string]any)
+	if sc["id"] != "grafana" {
+		t.Errorf("staticClient id = %v, want grafana", sc["id"])
+	}
+	if sc["public"] != true {
+		t.Errorf("staticClient public = %v, want true", sc["public"])
+	}
+	if sc["secretEnv"] != "GRAFANA_CLIENT_SECRET" {
+		t.Errorf("staticClient secretEnv = %v, want GRAFANA_CLIENT_SECRET", sc["secretEnv"])
+	}
+	if string(out.EnvSecretData["GRAFANA_CLIENT_SECRET"]) != "verysecret" {
+		t.Errorf("env GRAFANA_CLIENT_SECRET = %q, want verysecret",
+			string(out.EnvSecretData["GRAFANA_CLIENT_SECRET"]))
+	}
+}
+
+func TestBuild_StaticClients_MixedConfidentialAndSecretless(t *testing.T) {
+	clients := []dexv1.DexStaticClient{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "grafana", Namespace: "ns"},
+			Spec: dexv1.DexStaticClientSpec{
+				InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
+				SecretRef:       &dexv1.StaticClientSecretRef{Name: "grafana-oidc"},
+				DisplayName:     "Grafana",
+				RedirectURIs:    []string{"https://grafana.example.com/login/generic_oauth"},
+			},
+		},
+		secretlessClient("my-cli", "my-cli-id", nil),
+	}
+	secrets := map[string]string{
+		"ns/grafana-oidc[client-id]":     "grafana",
+		"ns/grafana-oidc[client-secret]": "verysecret",
+	}
+
+	out, scs := buildStaticClients(t, clients, secrets)
+
+	if len(scs) != 2 {
+		t.Fatalf("expected 2 static clients, got %d", len(scs))
+	}
+	if len(out.EnvSecretData) != 1 {
+		t.Fatalf("EnvSecretData = %v, want exactly the confidential client's entry", out.EnvSecretData)
+	}
+	if string(out.EnvSecretData["GRAFANA_CLIENT_SECRET"]) != "verysecret" {
+		t.Errorf("env GRAFANA_CLIENT_SECRET = %q, want verysecret",
+			string(out.EnvSecretData["GRAFANA_CLIENT_SECRET"]))
+	}
+	assertNoKeys(t, scs[1].(map[string]any), "secretEnv")
 }
 
 // ── Build: SAML connector with CA mount ───────────────────────────────────────
@@ -825,7 +963,7 @@ func TestBuild_StaticClient_EnvVarCollision(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "grafana", Namespace: "ns"},
 			Spec: dexv1.DexStaticClientSpec{
 				InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
-				SecretRef: dexv1.StaticClientSecretRef{
+				SecretRef: &dexv1.StaticClientSecretRef{
 					Name: "grafana-oidc",
 				},
 				DisplayName:  "Grafana",
@@ -836,7 +974,7 @@ func TestBuild_StaticClient_EnvVarCollision(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "GRAFANA", Namespace: "ns"},
 			Spec: dexv1.DexStaticClientSpec{
 				InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
-				SecretRef: dexv1.StaticClientSecretRef{
+				SecretRef: &dexv1.StaticClientSecretRef{
 					Name: "grafana-oidc-2",
 				},
 				DisplayName:  "Grafana Duplicate",
@@ -879,7 +1017,7 @@ func TestBuild_StaticClient_NoCollision(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "grafana", Namespace: "ns"},
 			Spec: dexv1.DexStaticClientSpec{
 				InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
-				SecretRef:       dexv1.StaticClientSecretRef{Name: "grafana-oidc"},
+				SecretRef:       &dexv1.StaticClientSecretRef{Name: "grafana-oidc"},
 				DisplayName:     "Grafana",
 				RedirectURIs:    []string{"https://grafana.example.com/callback"},
 			},
@@ -888,7 +1026,7 @@ func TestBuild_StaticClient_NoCollision(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "argocd", Namespace: "ns"},
 			Spec: dexv1.DexStaticClientSpec{
 				InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
-				SecretRef:       dexv1.StaticClientSecretRef{Name: "argocd-oidc"},
+				SecretRef:       &dexv1.StaticClientSecretRef{Name: "argocd-oidc"},
 				DisplayName:     "ArgoCD",
 				RedirectURIs:    []string{"https://argocd.example.com/callback"},
 			},

@@ -137,8 +137,9 @@ func TestE2E_OIDCConnector(t *testing.T) {
 	}, "ConnectorCount should be >= 1")
 }
 
-// TestE2E_StaticClient creates a DexInstallation and DexStaticClient, then
-// asserts that the redirect URI appears in config.yaml.
+// TestE2E_StaticClient creates a DexInstallation with a confidential and a
+// secretless public DexStaticClient, then asserts that both are rendered into
+// config.yaml and that only the confidential one reaches the env secret.
 func TestE2E_StaticClient(t *testing.T) {
 	ns := "e2e-sc"
 	e2eCreateNamespace(t, ns)
@@ -169,7 +170,7 @@ func TestE2E_StaticClient(t *testing.T) {
 			InstallationRef: dexv1.InstallationRef{Name: "dex", Namespace: ns},
 			DisplayName:     "Grafana",
 			RedirectURIs:    []string{"https://grafana.e2e.example.com/login/generic_oauth"},
-			SecretRef: dexv1.StaticClientSecretRef{
+			SecretRef: &dexv1.StaticClientSecretRef{
 				Name:            "grafana-creds",
 				ClientIDKey:     "client-id",
 				ClientSecretKey: "client-secret",
@@ -181,10 +182,48 @@ func TestE2E_StaticClient(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = e2eClient.Delete(context.Background(), sc) })
 
+	// Public client without a secretRef: id inline, no Secret involved.
+	publicSC := &dexv1.DexStaticClient{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-cli", Namespace: ns},
+		Spec: dexv1.DexStaticClientSpec{
+			InstallationRef: dexv1.InstallationRef{Name: "dex", Namespace: ns},
+			DisplayName:     "My CLI",
+			ClientID:        "my-cli-id",
+			Public:          true,
+			RedirectURIs:    []string{"http://127.0.0.1:8085/callback"},
+		},
+	}
+	if err := e2eClient.Create(context.Background(), publicSC); err != nil {
+		t.Fatalf("create secretless public static client: %v", err)
+	}
+	t.Cleanup(func() { _ = e2eClient.Delete(context.Background(), publicSC) })
+
 	e2eEventually(t, func() bool {
 		s := e2eGetSecret(ns, "dex-config")
 		return s != nil && strings.Contains(string(s.Data["config.yaml"]), "grafana.e2e.example.com")
 	}, "static client not in config.yaml")
+
+	e2eEventually(t, func() bool {
+		s := e2eGetSecret(ns, "dex-config")
+		if s == nil {
+			return false
+		}
+		cfg := string(s.Data["config.yaml"])
+		return strings.Contains(cfg, "id: my-cli-id") && strings.Contains(cfg, "public: true")
+	}, "secretless public static client not in config.yaml")
+
+	// The env secret carries the confidential client's secret only.
+	e2eEventually(t, func() bool {
+		s := e2eGetSecret(ns, "dex-env")
+		if s == nil {
+			return false
+		}
+		if string(s.Data["GRAFANA_CLIENT_SECRET"]) != "grafana-e2e-secret" {
+			return false
+		}
+		_, ok := s.Data["MY_CLI_CLIENT_SECRET"]
+		return !ok
+	}, "env secret must contain only the confidential client's secret")
 
 	e2eEventually(t, func() bool {
 		var updated dexv1.DexInstallation
@@ -192,8 +231,8 @@ func TestE2E_StaticClient(t *testing.T) {
 			client.ObjectKey{Namespace: ns, Name: "dex"}, &updated); err != nil {
 			return false
 		}
-		return updated.Status.StaticClientCount >= 1
-	}, "StaticClientCount should be >= 1")
+		return updated.Status.StaticClientCount >= 2
+	}, "StaticClientCount should be >= 2")
 }
 
 // TestE2E_NamespaceIsolation verifies that only connectors from allowed

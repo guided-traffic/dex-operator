@@ -24,9 +24,11 @@ import (
 )
 
 // buildStaticClients converts each DexStaticClient into a Dex StaticClient
-// config entry.  The client-id is resolved from the referenced Secret and
-// embedded directly; the client-secret is stored in envs and referenced via
-// the secretEnv field (bare env var name, no $-prefix).
+// config entry.  For clients with a secretRef the client-id is resolved from
+// the referenced Secret and embedded directly, while the client-secret is
+// stored in envs and referenced via the secretEnv field (bare env var name, no
+// $-prefix).  Secretless public clients carry their id inline and contribute
+// nothing to envs.
 func buildStaticClients(
 	ctx context.Context,
 	clients []dexv1.DexStaticClient,
@@ -52,6 +54,43 @@ func buildOneStaticClient(
 	envs map[string][]byte,
 	usedEnvKeys map[string]string,
 ) (StaticClient, error) {
+	sc := StaticClient{
+		Name:         c.Spec.DisplayName,
+		RedirectURIs: c.Spec.RedirectURIs,
+		Public:       c.Spec.Public,
+	}
+	if len(c.Spec.TrustedPeers) > 0 {
+		sc.TrustedPeers = c.Spec.TrustedPeers
+	}
+
+	// Secretless public client: the id is set inline, no Secret is read and
+	// no env var is emitted.  CRD-level CEL validation guarantees that
+	// clientID is set whenever secretRef is absent.
+	if c.Spec.SecretRef == nil {
+		sc.ID = c.Spec.ClientID
+		return sc, nil
+	}
+
+	clientID, csEnvKey, err := resolveClientCredentials(ctx, c, sr, envs, usedEnvKeys)
+	if err != nil {
+		return StaticClient{}, err
+	}
+	sc.ID = clientID
+	sc.SecretEnv = csEnvKey
+
+	return sc, nil
+}
+
+// resolveClientCredentials reads the client-id and client-secret from the
+// referenced Secret.  The client-id is returned for inline embedding, the
+// client-secret is written to envs under the returned env var key.
+func resolveClientCredentials(
+	ctx context.Context,
+	c *dexv1.DexStaticClient,
+	sr SecretResolver,
+	envs map[string][]byte,
+	usedEnvKeys map[string]string,
+) (clientID, csEnvKey string, err error) {
 	// Default key names defined by kubebuilder defaults on the CRD.
 	clientIDKey := c.Spec.SecretRef.ClientIDKey
 	if clientIDKey == "" {
@@ -63,19 +102,19 @@ func buildOneStaticClient(
 	}
 
 	// Resolve the actual client-id value (embedded inline in the config).
-	clientID, err := resolveSecret(ctx, c.Namespace, dexv1.SecretKeyRef{
+	clientID, err = resolveSecret(ctx, c.Namespace, dexv1.SecretKeyRef{
 		Name: c.Spec.SecretRef.Name,
 		Key:  clientIDKey,
 	}, sr)
 	if err != nil {
-		return StaticClient{}, fmt.Errorf("client-id: %w", err)
+		return "", "", fmt.Errorf("client-id: %w", err)
 	}
 
 	// Build the env var key and check for collisions.
-	csEnvKey := clientEnvKey(c.Name, "CLIENT_SECRET")
+	csEnvKey = clientEnvKey(c.Name, "CLIENT_SECRET")
 	resourceFQN := c.Namespace + "/" + c.Name
 	if prev, ok := usedEnvKeys[csEnvKey]; ok {
-		return StaticClient{}, fmt.Errorf(
+		return "", "", fmt.Errorf(
 			"env var name collision: %q is already used by %q (current: %q)",
 			csEnvKey, prev, resourceFQN,
 		)
@@ -89,20 +128,9 @@ func buildOneStaticClient(
 		Key:  clientSecretKey,
 	}, sr)
 	if err != nil {
-		return StaticClient{}, fmt.Errorf("client-secret: %w", err)
+		return "", "", fmt.Errorf("client-secret: %w", err)
 	}
 	envs[csEnvKey] = []byte(csVal)
 
-	sc := StaticClient{
-		ID:           clientID,
-		SecretEnv:    csEnvKey,
-		Name:         c.Spec.DisplayName,
-		RedirectURIs: c.Spec.RedirectURIs,
-		Public:       c.Spec.Public,
-	}
-	if len(c.Spec.TrustedPeers) > 0 {
-		sc.TrustedPeers = c.Spec.TrustedPeers
-	}
-
-	return sc, nil
+	return clientID, csEnvKey, nil
 }

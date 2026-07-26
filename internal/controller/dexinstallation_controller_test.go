@@ -456,7 +456,7 @@ func TestMapSecretToInstallation_StaticClient(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "grafana", Namespace: "dex"},
 		Spec: dexv1.DexStaticClientSpec{
 			InstallationRef: dexv1.InstallationRef{Name: inst.Name, Namespace: inst.Namespace},
-			SecretRef:       dexv1.StaticClientSecretRef{Name: "grafana-creds"},
+			SecretRef:       &dexv1.StaticClientSecretRef{Name: "grafana-creds"},
 			DisplayName:     "Grafana",
 			RedirectURIs:    []string{"https://grafana.example.com/callback"},
 		},

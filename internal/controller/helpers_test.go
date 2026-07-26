@@ -278,12 +278,24 @@ func TestGetReferencedSecretNames_OIDCConnector(t *testing.T) {
 func TestGetReferencedSecretNames_StaticClient(t *testing.T) {
 	sc := &dexv1.DexStaticClient{
 		Spec: dexv1.DexStaticClientSpec{
-			SecretRef: dexv1.StaticClientSecretRef{Name: "my-client-creds"},
+			SecretRef: &dexv1.StaticClientSecretRef{Name: "my-client-creds"},
 		},
 	}
 	names := sc.GetReferencedSecretNames()
 	if len(names) != 1 || names[0] != "my-client-creds" {
 		t.Errorf("expected [my-client-creds], got %v", names)
+	}
+}
+
+func TestGetReferencedSecretNames_StaticClient_Secretless(t *testing.T) {
+	sc := &dexv1.DexStaticClient{
+		Spec: dexv1.DexStaticClientSpec{
+			ClientID: "my-cli",
+			Public:   true,
+		},
+	}
+	if names := sc.GetReferencedSecretNames(); len(names) != 0 {
+		t.Errorf("expected no secret names, got %v", names)
 	}
 }
 

@@ -15,8 +15,8 @@ Vollständige globale Dex-Konfiguration: Issuer, Storage, Web (inkl. CORS `allow
 Zusätzlich: `configSecretName`, `envSecretName`, `allowedNamespaces` (Whitelist, `"*"` = alle), optionaler Auto-Restart (`rolloutRestart.enabled`, `rolloutRestart.deploymentName`).
 
 ### DexStaticClient
-Referenziert eine DexInstallation per Name+Namespace. Enthält `redirectURIs`, `trustedPeers`, `name`.
-Referenziert ein bestehendes Secret im gleichen Namespace per `secretRef` mit Keys für `client-id` und `client-secret`.
+Referenziert eine DexInstallation per Name+Namespace. Enthält `redirectURIs`, `trustedPeers`, `displayName`, `public`.
+Die Client-Credentials kommen entweder aus einem bestehenden Secret im gleichen Namespace (`secretRef` mit Keys für `client-id` und `client-secret`) oder — bei public/secretless Clients — inline über `clientID`.
 
 ### Connector CRDs (je eine eigene CRD pro Typ)
 `DexLDAPConnector`, `DexGitHubConnector`, `DexSAMLConnector`, `DexGitLabConnector`, `DexOIDCConnector`, `DexOAuth2Connector`, `DexGoogleConnector`, `DexLinkedInConnector`, `DexMicrosoftConnector`, `DexAuthProxyConnector`, `DexBitbucketConnector`, `DexLocalConnector`, `DexOpenShiftConnector`, `DexAtlassianCrowdConnector`, `DexGiteaConnector`, `DexKeystoneConnector`
@@ -54,6 +54,27 @@ Env-var naming convention:
 
 CA cert data (LDAP `rootCAData`) is base64-encoded and inlined in config.
 File-path-only certs (SAML `ca`, client TLS, service accounts) are added to `MountedSecrets`; the controller picks these up in Phase 4.
+
+### Static clients: confidential vs. public (secretless)
+
+`DexStaticClientSpec` sources the client ID either from `secretRef` (confidential) or
+from the inline `clientID` field (public/secretless, PKCE — supported by Dex since
+v2.24.0). The two are mutually exclusive; `buildOneStaticClient` branches on
+`SecretRef == nil` and then skips secret resolution, the env-key collision check and
+the `EnvSecretData` entry entirely, leaving `secretEnv` unset in the config.
+
+There is no admission webhook in this repo. All conditional validation is done with
+**CEL markers** (`+kubebuilder:validation:XValidation`) on the spec struct:
+
+1. `has(self.clientID) != has(self.secretRef)` — exactly one of the two.
+2. `(has(self.public) && self.public) || has(self.secretRef)` — confidential needs `secretRef`.
+3. `(has(self.public) && self.public) || (has(self.redirectURIs) && self.redirectURIs.size() > 0)` —
+   confidential needs `redirectURIs`; public clients may omit them and get Dex's
+   loopback/OOB/device-flow defaults.
+
+`public` carries `omitempty` and no default, so the rules must guard with
+`has(self.public)` — a bare `self.public` would error on objects that never set it.
+The rules are covered by envtest integration tests (the envtest apiserver enforces CEL).
 
 ---
 
