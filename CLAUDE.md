@@ -1,6 +1,11 @@
 # Dex Operator
 
 Ein Kubernetes Operator (Go 1.26, controller-runtime) der die Konfiguration von Dex dynamisch aus Custom Resources zusammenbaut.
+
+## Dokumentation
+- `README.md` — User-Doku: Key Features, Naming-Konventionen, TL;DR-Quickstart, vollständige CR-Referenz (alle 18 CRDs maximal befüllt, Connectors in `<details>`-Blöcken). Bei API-Änderungen die betroffenen Beispiele mitpflegen.
+- `DEVELOPER.md` — Entwickler-Doku: Repo-Layout, Paket-Verantwortlichkeiten, Reconcile-Flow, Checkliste "neuen Connector-Typ hinzufügen", Test-/Release-Prozess.
+- `SECURITY_ARCHITECTURE.md` — Sicherheitsarchitektur: Trust-Boundaries, Secret-Flow (env-Indirektion, MountedSecrets), Namespace-Isolation, RBAC-Footprint, Hardening-Checkliste.
 Dex wird weiterhin über das offizielle Dex Helm Chart installiert. Der Operator erzeugt zwei Secrets im Namespace der Dex-Installation:
 1. **Config-Secret** — Enthält die vollständige Dex-Konfiguration als YAML (Issuer, Storage, Web, gRPC, Logger, Expiry, Connectors, Static Clients)
 2. **Env-Secret** — Enthält alle Client-Secrets als Env-Variablen (z.B. `GRAFANA_CLIENT_SECRET`), wird per `envFrom` an den Dex-Container gehängt und in der Config per `secretEnv` referenziert
