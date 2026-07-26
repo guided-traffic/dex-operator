@@ -1,5 +1,10 @@
 # dex-operator
 
+[![Build Status](https://github.com/guided-traffic/dex-operator/actions/workflows/release.yml/badge.svg)](https://github.com/guided-traffic/dex-operator/actions)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/guided-traffic/dex-operator/main/.github/badges/coverage.json)](https://github.com/guided-traffic/dex-operator)
+[![Go Report Card](https://goreportcard.com/badge/github.com/guided-traffic/dex-operator)](https://goreportcard.com/report/github.com/guided-traffic/dex-operator)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+
 A Kubernetes operator (Go, [controller-runtime](https://github.com/kubernetes-sigs/controller-runtime)) that assembles the configuration of [Dex](https://dexidp.io/) dynamically from Custom Resources.
 
 Dex itself keeps being installed via the official [Dex Helm chart](https://github.com/dexidp/helm-charts). The operator watches Custom Resources across the cluster and renders two Secrets into the Dex namespace:
