@@ -219,6 +219,16 @@
       "groupSlug": "go-version"
     },
     {
+      "description": "conventional-changelog-conventionalcommits: block major updates. Preset v10 targets the new conventional-changelog API; @semantic-release/release-notes-generator (conventional-changelog-writer v8) silently drops all commits with it, producing empty release notes. Re-enable once release-notes-generator supports the v10 preset.",
+      "matchPackageNames": [
+        "conventional-changelog-conventionalcommits"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "enabled": false
+    },
+    {
       "description": "Use 'fix' instead of 'chore' for all dependency updates (including major)",
       "matchPackageNames": ["*"],
       "semanticCommitType": "fix"

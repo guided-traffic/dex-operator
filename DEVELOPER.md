@@ -156,6 +156,11 @@ Always use the Makefile targets — they match CI exactly.
 | `make docker-build` / `docker-buildx` | image build (multi-arch with buildx), `IMG=` to override the tag |
 | `make coverage-merge` / `coverage-json` | merge unit+integration profiles, emit the README badge JSON |
 
+Coverage profiles exclude generated code (`zz_generated.*`, see `COVERAGE_EXCLUDE_RE`
+in the [Makefile](Makefile)) — the filter runs directly after every
+profile-producing test target, so local reports, the CI merge step and the badge
+all measure hand-written code only.
+
 Test layers:
 
 - **Unit** (`internal/...`): builder rendering, env naming, determinism — no cluster.
@@ -173,9 +178,9 @@ So CRD updates ship automatically with every `helm upgrade`.
 
 ## CI & Releases
 
-- **build.yml** — PR/branch pipeline (lint, tests, image build).
-- **release.yml** — on `main`: [semantic-release](https://semantic-release.gitbook.io/) (`.releaserc.json`) derives the version from **Conventional Commits**, tags, generates release notes, publishes the Docker image `guidedtraffic/dex-operator` and the Helm repo at `https://guided-traffic.github.io/dex-operator`.
-- **renovate.yml / renovate.json** — automated dependency updates.
+- **release.yml** ("Test and Release") — on PRs and pushes to `main`: lint, security scans, unit/integration/E2E tests, combined coverage report; on `main` additionally [semantic-release](https://semantic-release.gitbook.io/) (`.releaserc.json`) derives the version from **Conventional Commits**, tags and creates the GitHub release with generated notes.
+- **build.yml** ("Release Docker & Helm") — on `release: published`: builds and pushes the Docker image `guidedtraffic/dex-operator`, packages the Helm chart, publishes it to the Helm repo at `https://guided-traffic.github.io/dex-operator` (gh-pages branch) and attaches only the current chart `.tgz` to the release.
+- **renovate.yml / renovate.json** — automated dependency updates. `conventional-changelog-conventionalcommits` is held at v9 (major updates disabled in `renovate.json`): with v10, `@semantic-release/release-notes-generator` silently drops all commits and release notes come out empty.
 
 Because versioning is commit-driven, commit messages must follow Conventional Commits (`feat:`, `fix:`, `chore:` …); `feat!:`/`BREAKING CHANGE:` triggers a major release.
 

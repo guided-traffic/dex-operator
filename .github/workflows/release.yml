@@ -576,9 +576,12 @@ jobs:
             exit 1
           fi
 
-          # Merge coverage files
-          echo "mode: set" > coverage-merged.out
-          grep -h -v "^mode:" $COVERAGE_FILES >> coverage-merged.out || true
+          # Merge coverage files (profiles are produced with -covermode=atomic).
+          # Generated code (zz_generated.*) is already filtered out by the make
+          # targets; the extra grep is a safety net for unfiltered artifacts.
+          # Keep the exclude pattern in sync with COVERAGE_EXCLUDE_RE in the Makefile.
+          echo "mode: atomic" > coverage-merged.out
+          grep -h -v "^mode:" $COVERAGE_FILES | grep -vE 'zz_generated\.' >> coverage-merged.out || true
 
           # Generate reports
           mkdir -p coverage

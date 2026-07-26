@@ -12,6 +12,15 @@ GOFMT = gofmt
 # Coverage directory
 COVERAGE_DIR = coverage
 
+# Exclude generated code from coverage profiles: it contains no hand-written
+# logic (deepcopy boilerplate) and would distort the numbers. Applied directly
+# after every profile-producing test run so all downstream consumers (reports,
+# merge, badge, CI PR comment) inherit filtered data.
+COVERAGE_EXCLUDE_RE = zz_generated\.
+define filter_coverage
+	@grep -vE '$(COVERAGE_EXCLUDE_RE)' $(1) > $(1).filtered && mv $(1).filtered $(1)
+endef
+
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -70,6 +79,7 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes.
 .PHONY: test
 test: fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./... -coverprofile cover.out
+	$(call filter_coverage,cover.out)
 
 .PHONY: test-unit
 test-unit: envtest ## Run unit tests only.
@@ -81,6 +91,7 @@ test-unit-coverage: envtest ## Run unit tests with coverage.
 	@echo "Running unit tests with coverage..."
 	@mkdir -p $(COVERAGE_DIR)
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" $(GOTEST) -v -short -coverprofile=$(COVERAGE_DIR)/unit.out -covermode=atomic ./...
+	$(call filter_coverage,$(COVERAGE_DIR)/unit.out)
 
 .PHONY: test-integration
 test-integration: envtest ## Run integration tests only.
@@ -92,6 +103,7 @@ test-integration-coverage: envtest ## Run integration tests with coverage.
 	@echo "Running integration tests with coverage..."
 	@mkdir -p $(COVERAGE_DIR)
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" $(GOTEST) -v -tags=integration -count=1 -timeout=60m -coverprofile=$(COVERAGE_DIR)/integration.out -covermode=atomic -coverpkg=./... ./test/integration/...
+	$(call filter_coverage,$(COVERAGE_DIR)/integration.out)
 
 .PHONY: test-e2e
 test-e2e: ## Run E2E tests against a running Kind cluster.
@@ -155,6 +167,7 @@ coverage: envtest ## Generate test coverage report.
 	@echo "Generating coverage report..."
 	@mkdir -p $(COVERAGE_DIR)
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" $(GOTEST) -coverprofile=$(COVERAGE_DIR)/coverage.out ./...
+	$(call filter_coverage,$(COVERAGE_DIR)/coverage.out)
 	$(GOCMD) tool cover -html=$(COVERAGE_DIR)/coverage.out -o $(COVERAGE_DIR)/coverage.html
 	$(GOCMD) tool cover -func=$(COVERAGE_DIR)/coverage.out > $(COVERAGE_DIR)/coverage.txt
 	@echo "Coverage report generated at $(COVERAGE_DIR)/coverage.html"
@@ -166,6 +179,7 @@ coverage-ci: envtest ## Generate CI coverage report.
 	@echo "Generating CI coverage report..."
 	@mkdir -p $(COVERAGE_DIR)
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" $(GOTEST) -coverprofile=$(COVERAGE_DIR)/coverage.out ./...
+	$(call filter_coverage,$(COVERAGE_DIR)/coverage.out)
 	$(GOCMD) tool cover -func=$(COVERAGE_DIR)/coverage.out > $(COVERAGE_DIR)/coverage.txt
 	@grep "total:" $(COVERAGE_DIR)/coverage.txt
 .PHONY: coverage-merge
@@ -184,12 +198,13 @@ coverage-merge: ## Merge unit and integration coverage profiles.
 coverage-json: ## Generate coverage badge JSON for shields.io.
 	@echo "Generating coverage badge JSON..."
 	@mkdir -p .github/badges
+	@# Color thresholds must match the badge step in .github/workflows/release.yml
 	@COVERAGE=$$(grep "total:" $(COVERAGE_DIR)/combined.txt | awk '{print $$3}' | sed 's/%//'); \
 	COLOR="red"; \
-	if [ $$(echo "$$COVERAGE >= 80" | bc -l) -eq 1 ]; then COLOR="brightgreen"; \
-	elif [ $$(echo "$$COVERAGE >= 60" | bc -l) -eq 1 ]; then COLOR="green"; \
-	elif [ $$(echo "$$COVERAGE >= 40" | bc -l) -eq 1 ]; then COLOR="yellow"; \
-	elif [ $$(echo "$$COVERAGE >= 20" | bc -l) -eq 1 ]; then COLOR="orange"; \
+	if [ $$(echo "$$COVERAGE >= 90" | bc -l) -eq 1 ]; then COLOR="brightgreen"; \
+	elif [ $$(echo "$$COVERAGE >= 80" | bc -l) -eq 1 ]; then COLOR="green"; \
+	elif [ $$(echo "$$COVERAGE >= 70" | bc -l) -eq 1 ]; then COLOR="yellow"; \
+	elif [ $$(echo "$$COVERAGE >= 60" | bc -l) -eq 1 ]; then COLOR="orange"; \
 	fi; \
 	echo "{\"schemaVersion\":1,\"label\":\"coverage\",\"message\":\"$$COVERAGE%\",\"color\":\"$$COLOR\"}" > .github/badges/coverage.json
 	@echo "Badge JSON created at .github/badges/coverage.json"

@@ -168,6 +168,16 @@ jobs:
           mkdir -p /tmp/helm-charts
           cp -r deploy/helm/repo/* /tmp/helm-charts/
 
+      # Attach only the freshly packaged chart to the release. This must run
+      # before the gh-pages checkout below, whose working tree contains every
+      # historical chart tgz (a bare *.tgz glob there attached all of them).
+      - name: Upload chart to Release Assets
+        uses: softprops/action-gh-release@v3
+        with:
+          files: deploy/helm/repo/*.tgz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Checkout gh-pages branch
         uses: actions/checkout@v7
         with:
@@ -197,12 +207,3 @@ jobs:
           git add --force *.tgz index.yaml
           git commit -m "Release Helm chart for $GITHUB_REF_NAME"
           git push --force origin gh-pages
-
-      - name: Update Release Assets
-        uses: softprops/action-gh-release@v3
-        with:
-          files: |
-            *.tgz
-            index.yaml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
