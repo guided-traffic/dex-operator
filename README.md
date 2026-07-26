@@ -166,7 +166,7 @@ spec:
   installationRef:
     name: main
     namespace: dex
-  name: Grafana
+  displayName: Grafana
   secretRef:
     name: grafana-oidc
     clientIDKey: client-id
@@ -174,6 +174,31 @@ spec:
   redirectURIs:
     - https://grafana.example.com/login/generic_oauth
 ```
+
+#### Public (secretless) clients
+
+Public clients — CLIs, native and single-page apps that authenticate with PKCE — have no client secret. Set `public: true` and provide the client ID inline via `clientID` instead of a `secretRef`; no Kubernetes Secret is involved and no env variable is emitted.
+
+```yaml
+apiVersion: dex.gtrfc.com/v1
+kind: DexStaticClient
+metadata:
+  name: my-cli
+  namespace: monitoring
+spec:
+  installationRef:
+    name: main
+    namespace: dex
+  displayName: My CLI
+  public: true
+  clientID: my-cli
+  redirectURIs:
+    - http://127.0.0.1:8085/callback
+```
+
+`redirectURIs` may be omitted entirely for public clients. Dex then accepts its built-in defaults: any `http://localhost:<port>` / loopback address, the OOB URN (`urn:ietf:wg:oauth:2.0:oob`) and the device-flow callback.
+
+`clientID` and `secretRef` are mutually exclusive and exactly one must be set; confidential (non-public) clients always need `secretRef` and a non-empty `redirectURIs`. These rules are enforced by the CRD at admission time. A public client may still use `secretRef` if it needs a secret in addition to PKCE.
 
 ### DexLDAPConnector
 

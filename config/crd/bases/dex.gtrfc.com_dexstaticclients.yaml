@@ -54,9 +54,20 @@ spec:
           metadata:
             type: object
           spec:
-            description: DexStaticClientSpec defines the desired state of a Dex static
-              OAuth2 client.
+            description: |-
+              DexStaticClientSpec defines the desired state of a Dex static OAuth2 client.
+
+              A client is either confidential (client-id and client-secret sourced from a
+              Kubernetes Secret via secretRef) or public/secretless (client-id set inline
+              via clientID, no secret at all).  Public clients may still use secretRef if
+              they need a secret in addition to PKCE.
             properties:
+              clientID:
+                description: |-
+                  ClientID is the OAuth2 client ID, set inline.  Mutually exclusive with
+                  secretRef and intended for public (secretless) clients, whose ID is not
+                  confidential.
+                type: string
               displayName:
                 description: |-
                   DisplayName is the human-readable display name of the client shown on the
@@ -81,15 +92,18 @@ spec:
                   secret required).
                 type: boolean
               redirectURIs:
-                description: RedirectURIs is the list of allowed redirect URIs.
+                description: |-
+                  RedirectURIs is the list of allowed redirect URIs.  Required for
+                  confidential clients.  A public client may leave it empty, in which case
+                  Dex accepts its loopback, OOB and device-flow defaults.
                 items:
                   type: string
-                minItems: 1
                 type: array
               secretRef:
                 description: |-
                   SecretRef references the existing Secret that contains the client-id
-                  and client-secret for this client.
+                  and client-secret for this client.  Required for confidential clients,
+                  mutually exclusive with clientID.
                 properties:
                   clientIDKey:
                     default: client-id
@@ -119,9 +133,15 @@ spec:
             required:
             - displayName
             - installationRef
-            - redirectURIs
-            - secretRef
             type: object
+            x-kubernetes-validations:
+            - message: exactly one of clientID or secretRef must be set
+              rule: has(self.clientID) != has(self.secretRef)
+            - message: secretRef is required for confidential (non-public) clients
+              rule: (has(self.public) && self.public) || has(self.secretRef)
+            - message: redirectURIs is required for confidential (non-public) clients
+              rule: (has(self.public) && self.public) || (has(self.redirectURIs) &&
+                self.redirectURIs.size() > 0)
           status:
             description: DexStaticClientStatus defines the observed state of DexStaticClient.
             properties:

@@ -317,7 +317,7 @@ func TestBuild_StaticClient_NoAllowedScopes_DexSchema(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "grafana", Namespace: "ns"},
 			Spec: dexv1.DexStaticClientSpec{
 				InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
-				SecretRef: dexv1.StaticClientSecretRef{
+				SecretRef: &dexv1.StaticClientSecretRef{
 					Name:            "grafana-oidc",
 					ClientIDKey:     "client-id",
 					ClientSecretKey: "client-secret",
