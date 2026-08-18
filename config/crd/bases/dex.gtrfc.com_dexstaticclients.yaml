@@ -68,6 +68,15 @@ spec:
                   secretRef and intended for public (secretless) clients, whose ID is not
                   confidential.
                 type: string
+              cors:
+                description: |-
+                  CORS registers the origins of this client's own redirectURIs (https only)
+                  in the installation's web.allowedOrigins.  Intended for browser/SPA
+                  clients that run the code+PKCE flow via XHR; purely server-side clients
+                  never hit the CORS-gated endpoints and gain nothing from it.  The flag
+                  grants no authority beyond redirectURIs: only origins the client already
+                  controls as redirect targets can be derived.
+                type: boolean
               displayName:
                 description: |-
                   DisplayName is the human-readable display name of the client shown on the

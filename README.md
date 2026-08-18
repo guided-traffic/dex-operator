@@ -85,6 +85,7 @@ Two `DexStaticClient` resources whose names sanitize to the same env var (e.g. `
 | Static client Secret keys | `client-id` / `client-secret` (overridable via `secretRef.clientIDKey` / `secretRef.clientSecretKey`) |
 | Config Secret content | single key `config.yaml` |
 | Managed Secret labels | `app.kubernetes.io/managed-by: dex-operator`, `dex.gtrfc.com/installation: <name>` |
+| Derived CORS origin | `scheme://host[:port]` of every **https** `redirectURIs` entry of a `DexStaticClient` with `cors: true` — host lowercased, a redundant `:443` dropped (e.g. `https://dtrack.example.com/static/cb.html` → `https://dtrack.example.com`) |
 | Connector cert files | `/etc/dex/certs/<connector-id>-<field>.pem` (e.g. `-root-ca`, `-client-cert`, `-client-key`, `-ca`) |
 | Google service account | `/etc/dex/secrets/<connector-id>-service-account.json` |
 | Storage TLS files | `/etc/dex/certs/postgres-*.pem`, `etcd-*.pem`, `mysql-*.pem` |
@@ -339,6 +340,9 @@ spec:
     tlsKey: /etc/dex/tls/tls.key      # example
     # Security (CORS): only list origins that must call Dex from the browser
     # (e.g. SPAs using PKCE). "*" would allow any website to probe Dex.
+    # Browser clients can instead self-register via DexStaticClient.spec.cors;
+    # this list stays as the base and escape hatch. The rendered list is this
+    # list, in order, plus the derived origins appended and sorted.
     allowedOrigins:
       - https://app.example.com       # example
     allowedHeaders:
@@ -462,6 +466,7 @@ spec:
   trustedPeers:
     - argocd                          # example
   public: false                       # default
+  cors: false                         # default — see "Browser clients" below
 ```
 
 Public client, fully populated:
@@ -479,6 +484,7 @@ spec:
   displayName: My CLI
   public: true
   clientID: my-cli                    # inline — a client ID is not confidential
+  cors: false                         # default — see "Browser clients" below
   # Optional for public clients. Omit to accept Dex's defaults:
   # http://localhost:<any-port>, urn:ietf:wg:oauth:2.0:oob, /device/callback
   redirectURIs:
@@ -507,6 +513,43 @@ staticClients:
 | any      | set        | set         | ❌    | rejected: ambiguous |
 
 Additionally: confidential clients must set at least one entry in `redirectURIs`.
+
+**Browser clients (`cors: true`):** Dex gates its browser-facing endpoints (discovery, token, keys) behind a CORS allowlist. Server-side clients never hit it; an SPA that runs code+PKCE via XHR does. Setting `cors: true` registers the origins of this client's own **https** `redirectURIs` in the installation's `web.allowedOrigins`, so a browser client can self-register from its own namespace instead of requiring an edit on the `DexInstallation`:
+
+```yaml
+apiVersion: dex.gtrfc.com/v1
+kind: DexStaticClient
+metadata:
+  name: dependency-track
+  namespace: dependency-track
+spec:
+  installationRef:
+    name: main
+    namespace: dex
+  displayName: Dependency-Track
+  public: true
+  clientID: dependency-track
+  cors: true                          # opt-in; default false
+  redirectURIs:
+    - https://dtrack.example.com/static/oidc-callback.html
+```
+
+renders into the installation's config as:
+
+```yaml
+web:
+  allowedOrigins:
+    - https://dtrack.example.com      # derived — path stripped
+```
+
+Rules:
+
+- Only `https` URIs contribute. `http://localhost`/loopback, custom schemes and the OOB URN are redirect conveniences for native clients, not browser origins, and are skipped silently. Use `DexInstallation.spec.web.allowedOrigins` for those.
+- Origins are derived only from the client's **own** `redirectURIs` — the flag grants no authority beyond that already RBAC-gated field. There is no free-form origin field.
+- Derived origins are appended to `DexInstallation.spec.web.allowedOrigins` (which stays as base and escape hatch) in sorted order; the authored list keeps its order and duplicates collapse.
+- Derivation is stateless: deleting the client or removing the flag drops the origin on the next render.
+- Dex matches origins **literally** (no subdomain wildcards — `https://*.example.com` would never match). The only wildcard is `"*"`, which can never be produced by derivation.
+- If the installation has no `spec.web` at all, a derived origin creates the `web:` block containing only `allowedOrigins`; the listener addresses come from the Dex chart's CLI flags and stay untouched.
 
 ### Connectors
 

@@ -19,6 +19,9 @@ package builder
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -108,7 +111,9 @@ func Build(ctx context.Context, in Input) (Output, error) {
 		return Output{}, fmt.Errorf("building static client configs: %w", err)
 	}
 
-	cfg := assembleDexConfig(in.Installation.Spec, storage, connEntries, clients, len(in.Connectors.Local) > 0)
+	corsOrigins := deriveCORSOrigins(in.StaticClients)
+
+	cfg := assembleDexConfig(in.Installation.Spec, storage, connEntries, clients, len(in.Connectors.Local) > 0, corsOrigins)
 
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
@@ -130,6 +135,7 @@ func assembleDexConfig(
 	connectors []ConnectorEntry,
 	clients []StaticClient,
 	enablePasswordDB bool,
+	corsOrigins []string,
 ) DexConfig {
 	cfg := DexConfig{
 		Issuer:           spec.Issuer,
@@ -137,17 +143,7 @@ func assembleDexConfig(
 		Connectors:       connectors,
 		StaticClients:    clients,
 		EnablePasswordDB: enablePasswordDB,
-	}
-
-	if spec.Web != nil {
-		cfg.Web = &WebConfig{
-			HTTP:           spec.Web.HTTP,
-			HTTPS:          spec.Web.HTTPS,
-			TLSCert:        spec.Web.TLSCert,
-			TLSKey:         spec.Web.TLSKey,
-			AllowedOrigins: spec.Web.AllowedOrigins,
-			AllowedHeaders: spec.Web.AllowedHeaders,
-		}
+		Web:              assembleWebConfig(spec.Web, corsOrigins),
 	}
 
 	if spec.GRPC != nil {
@@ -179,6 +175,110 @@ func assembleDexConfig(
 	}
 
 	return cfg
+}
+
+// assembleWebConfig renders the web block from the installation spec plus the
+// CORS origins derived from static clients.  It returns nil when neither
+// contributes anything, so an installation without web configuration keeps a
+// config free of an empty web: block.  Origins alone create the block: the
+// listener addresses come from the dex binary's --web-http-addr/--web-https-addr
+// flags (set by the dexidp helm chart), which are applied after config load.
+func assembleWebConfig(spec *dexv1.DexWebSpec, corsOrigins []string) *WebConfig {
+	if spec == nil && len(corsOrigins) == 0 {
+		return nil
+	}
+
+	web := &WebConfig{}
+	if spec != nil {
+		web.HTTP = spec.HTTP
+		web.HTTPS = spec.HTTPS
+		web.TLSCert = spec.TLSCert
+		web.TLSKey = spec.TLSKey
+		web.AllowedOrigins = spec.AllowedOrigins
+		web.AllowedHeaders = spec.AllowedHeaders
+	}
+	web.AllowedOrigins = appendDerivedOrigins(web.AllowedOrigins, corsOrigins)
+
+	return web
+}
+
+// appendDerivedOrigins appends every derived origin that is not already present
+// to base and returns the result, leaving base itself untouched.  The
+// installation's authored order is preserved so that an operator upgrade alone
+// never rewrites an existing allowedOrigins list (which would diff the config
+// and trigger a spurious dex rollout); the derived tail is sorted, making the
+// rendered YAML independent of client iteration order.
+func appendDerivedOrigins(base, derived []string) []string {
+	if len(derived) == 0 {
+		return base
+	}
+
+	seen := make(map[string]struct{}, len(base)+len(derived))
+	for _, o := range base {
+		seen[o] = struct{}{}
+	}
+
+	extra := make([]string, 0, len(derived))
+	for _, o := range derived {
+		if _, dup := seen[o]; dup {
+			continue
+		}
+		seen[o] = struct{}{}
+		extra = append(extra, o)
+	}
+	if len(extra) == 0 {
+		return base
+	}
+	sort.Strings(extra)
+
+	out := make([]string, 0, len(base)+len(extra))
+	out = append(out, base...)
+	return append(out, extra...)
+}
+
+// deriveCORSOrigins collects the browser origins of every static client that
+// opted in via spec.cors.  Origins are derived from the client's own
+// redirectURIs, so the flag grants no authority beyond that already
+// RBAC-gated field.  Only https URLs contribute: loopback/http targets, custom
+// schemes and the OOB URN are redirect conveniences for native clients, not
+// browser origins.  Unparsable entries are skipped instead of failing the
+// build — one malformed tenant resource must not break the render for every
+// other client of the installation.
+func deriveCORSOrigins(clients []dexv1.DexStaticClient) []string {
+	var origins []string
+	seen := make(map[string]struct{})
+
+	for i := range clients {
+		if !clients[i].Spec.CORS {
+			continue
+		}
+		for _, uri := range clients[i].Spec.RedirectURIs {
+			origin, ok := originFromRedirectURI(uri)
+			if !ok {
+				continue
+			}
+			if _, dup := seen[origin]; dup {
+				continue
+			}
+			seen[origin] = struct{}{}
+			origins = append(origins, origin)
+		}
+	}
+
+	return origins
+}
+
+// originFromRedirectURI reduces an https redirect URI to the exact
+// scheme://host[:port] string a browser sends in its Origin header.  The host
+// is lowercased and a redundant :443 dropped, because Dex matches origins
+// literally (gorilla/handlers) and would otherwise silently never match.
+func originFromRedirectURI(uri string) (string, bool) {
+	u, err := url.Parse(uri)
+	if err != nil || u.Scheme != "https" || u.Host == "" {
+		return "", false
+	}
+	host := strings.TrimSuffix(strings.ToLower(u.Host), ":443")
+	return "https://" + host, true
 }
 
 func assembleGRPCConfig(s *dexv1.DexGRPCSpec) *GRPCConfig {
