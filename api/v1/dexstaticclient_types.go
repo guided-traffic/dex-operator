@@ -63,6 +63,15 @@ type DexStaticClientSpec struct {
 	// Public marks the client as a public application (no client secret required).
 	// +optional
 	Public bool `json:"public,omitempty"`
+
+	// CORS registers the origins of this client's own redirectURIs (https only)
+	// in the installation's web.allowedOrigins.  Intended for browser/SPA
+	// clients that run the code+PKCE flow via XHR; purely server-side clients
+	// never hit the CORS-gated endpoints and gain nothing from it.  The flag
+	// grants no authority beyond redirectURIs: only origins the client already
+	// controls as redirect targets can be derived.
+	// +optional
+	CORS bool `json:"cors,omitempty"`
 }
 
 // StaticClientSecretRef references the keys inside a Kubernetes Secret that

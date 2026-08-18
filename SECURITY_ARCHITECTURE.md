@@ -82,6 +82,14 @@ Confidential clients authenticate with a secret at the token endpoint; the redir
 
 Operational rule: model server-side applications as confidential, interactive tools as public. Marking a server app `public` silently removes client authentication from your token endpoint. A hybrid also exists (public + `secretRef`): PKCE *plus* a secret.
 
+## Tenant-Registered CORS Origins (`cors: true`)
+
+A `DexStaticClient` with `cors: true` contributes the origins of its own **https** `redirectURIs` to the installation's `web.allowedOrigins` ([internal/builder/builder.go](internal/builder/builder.go), `deriveCORSOrigins`). This is deliberately a boolean flag and not a free-form origin list: **it grants no authority beyond `redirectURIs`**, which is already the security-critical, RBAC-gated field. A tenant can only allowlist origins it already controls as redirect targets — and a tenant able to set an arbitrary redirect URI has a far stronger primitive than a CORS entry. Derivation can never produce `"*"`; that value remains reachable only through the platform operator's own `spec.web.allowedOrigins`.
+
+What CORS does and does not do here: it is **defense in depth, not an authorization boundary**. Dex's token endpoint carries no ambient credentials (no cookies, no session), so a cross-origin request from an unlisted site gains nothing even if it were allowed — the authorization code is bound by PKCE. CORS keeps browser-side probing of the discovery/keys/token endpoints down and prevents an unrelated page from reading responses. Matching is **literal** (Dex wraps these handlers with `gorilla/handlers.AllowedOrigins`): no subdomain wildcards, so a compromised sibling host does not inherit access, and an entry with a wrong case or a redundant `:443` would simply never match — the operator normalizes both when deriving.
+
+Residual exposure: the flag makes the installation's origin list depend on tenant resources, so a tenant in an allowed namespace can grow that list. The bound is its own `redirectURIs`; the control is the same one that already gates client registration — `allowedNamespaces` plus RBAC on `dexstaticclients`.
+
 ## Operator RBAC Footprint
 
 Granted by the Helm chart's ClusterRole (markers in [internal/controller/rbac.go](internal/controller/rbac.go)):

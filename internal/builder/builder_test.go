@@ -771,6 +771,224 @@ func TestBuild_StaticClients_MixedConfidentialAndSecretless(t *testing.T) {
 	assertNoKeys(t, scs[1].(map[string]any), "secretEnv")
 }
 
+// ── Build: CORS origins derived from static clients ───────────────────────────
+
+// corsClient returns a secretless client that opted into CORS origin
+// derivation.
+func corsClient(name string, redirectURIs []string) dexv1.DexStaticClient {
+	c := secretlessClient(name, name+"-id", redirectURIs)
+	c.Spec.CORS = true
+	return c
+}
+
+// buildWithClients renders a config for the given installation and clients and
+// returns the parsed YAML.
+func buildWithClients(
+	t *testing.T,
+	inst *dexv1.DexInstallation,
+	clients []dexv1.DexStaticClient,
+) map[string]any {
+	t.Helper()
+	out, err := builder.Build(context.Background(), builder.Input{
+		Installation:  inst,
+		StaticClients: clients,
+		Secrets:       mockResolver(nil),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	return parseYAML(t, out.ConfigYAML)
+}
+
+// allowedOrigins extracts web.allowedOrigins from a parsed config, failing the
+// test if the web block is missing.
+func allowedOrigins(t *testing.T, m map[string]any) []string {
+	t.Helper()
+	web, ok := m["web"].(map[string]any)
+	if !ok {
+		t.Fatalf("no web block in config: %v", m["web"])
+	}
+	raw, _ := web["allowedOrigins"].([]any)
+	origins := make([]string, 0, len(raw))
+	for _, o := range raw {
+		origins = append(origins, fmt.Sprint(o))
+	}
+	return origins
+}
+
+func assertOrigins(t *testing.T, got, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("web.allowedOrigins = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("web.allowedOrigins = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestBuild_CORSOrigins_DerivedFromRedirectURIs(t *testing.T) {
+	// Paths are stripped, the same origin appearing twice collapses, and the
+	// derived set is sorted regardless of client/URI order.
+	m := buildWithClients(t, minimalInstallation("ns"), []dexv1.DexStaticClient{
+		corsClient("zeta", []string{
+			"https://zeta.example.com/static/oidc-callback.html",
+			"https://zeta.example.com/other/callback",
+		}),
+		corsClient("alpha", []string{"https://alpha.example.com/cb"}),
+	})
+
+	assertOrigins(t, allowedOrigins(t, m),
+		[]string{"https://alpha.example.com", "https://zeta.example.com"})
+}
+
+func TestBuild_CORSOrigins_NormalizesHostAndDefaultPort(t *testing.T) {
+	// Dex matches the Origin header literally, so a mixed-case host or an
+	// explicit :443 would produce an entry that can never match.
+	m := buildWithClients(t, minimalInstallation("ns"), []dexv1.DexStaticClient{
+		corsClient("dtrack", []string{
+			"https://DTrack.Example.COM:443/cb",
+			"https://dtrack.example.com/other",
+			"https://other.example.com:8443/cb",
+		}),
+	})
+
+	assertOrigins(t, allowedOrigins(t, m),
+		[]string{"https://dtrack.example.com", "https://other.example.com:8443"})
+}
+
+func TestBuild_CORSOrigins_SkipsNonBrowserRedirectURIs(t *testing.T) {
+	// Loopback, OOB and custom-scheme targets belong to native/CLI clients;
+	// they are redirect conveniences, not browser origins.
+	m := buildWithClients(t, minimalInstallation("ns"), []dexv1.DexStaticClient{
+		corsClient("cli", []string{
+			"http://localhost:8000/cb",
+			"http://127.0.0.1:8085/callback",
+			"urn:ietf:wg:oauth:2.0:oob",
+			"myapp://callback",
+			"://broken",
+		}),
+	})
+
+	// Nothing derived and no installation-level web spec → no web block at all.
+	assertNoKeys(t, m, "web")
+}
+
+func TestBuild_CORSOrigins_UnionWithInstallationList(t *testing.T) {
+	inst := minimalInstallation("ns")
+	inst.Spec.Web = &dexv1.DexWebSpec{
+		HTTP:           "0.0.0.0:5556",
+		AllowedOrigins: []string{"https://zzz.example.com", "https://dtrack.example.com"},
+	}
+
+	m := buildWithClients(t, inst, []dexv1.DexStaticClient{
+		corsClient("dtrack", []string{"https://dtrack.example.com/cb"}), // overlap
+		corsClient("spa", []string{"https://spa.example.com/cb"}),
+	})
+
+	// The authored list keeps its order (an operator upgrade alone must not
+	// diff the config); only genuinely new origins are appended, sorted.
+	assertOrigins(t, allowedOrigins(t, m), []string{
+		"https://zzz.example.com",
+		"https://dtrack.example.com",
+		"https://spa.example.com",
+	})
+
+	// The static list must survive untouched in the installation object.
+	if len(inst.Spec.Web.AllowedOrigins) != 2 {
+		t.Errorf("spec.web.allowedOrigins was mutated: %v", inst.Spec.Web.AllowedOrigins)
+	}
+}
+
+func TestBuild_CORSOrigins_CreateWebBlockWhenSpecAbsent(t *testing.T) {
+	inst := minimalInstallation("ns")
+	if inst.Spec.Web != nil {
+		t.Fatalf("test precondition: spec.web must be nil")
+	}
+
+	m := buildWithClients(t, inst, []dexv1.DexStaticClient{
+		corsClient("spa", []string{"https://spa.example.com/cb"}),
+	})
+
+	assertOrigins(t, allowedOrigins(t, m), []string{"https://spa.example.com"})
+
+	// The listener addresses come from the dex binary's CLI flags; a derived
+	// web block must not invent http/https keys that would override them.
+	web := m["web"].(map[string]any)
+	assertNoKeys(t, web, "http", "https", "tlsCert", "tlsKey")
+}
+
+func TestBuild_CORSOrigins_FlagUnsetDerivesNothing(t *testing.T) {
+	inst := minimalInstallation("ns")
+	inst.Spec.Web = &dexv1.DexWebSpec{AllowedOrigins: []string{"https://zzz.example.com"}}
+
+	// Regression guard: existing clients without the flag must not change the
+	// rendered origins, not even their order.
+	m := buildWithClients(t, inst, []dexv1.DexStaticClient{
+		secretlessClient("spa", "spa-id", []string{"https://spa.example.com/cb"}),
+	})
+
+	assertOrigins(t, allowedOrigins(t, m), []string{"https://zzz.example.com"})
+}
+
+func TestBuild_CORSOrigins_Deterministic(t *testing.T) {
+	inst := minimalInstallation("ns")
+	inst.Spec.Web = &dexv1.DexWebSpec{AllowedOrigins: []string{"https://zzz.example.com"}}
+	clients := []dexv1.DexStaticClient{
+		corsClient("zeta", []string{"https://zeta.example.com/cb"}),
+		corsClient("alpha", []string{"https://alpha.example.com/cb"}),
+	}
+
+	first, err := builder.Build(context.Background(), builder.Input{
+		Installation: inst, StaticClients: clients, Secrets: mockResolver(nil),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	second, err := builder.Build(context.Background(), builder.Input{
+		Installation: inst, StaticClients: clients, Secrets: mockResolver(nil),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if string(first.ConfigYAML) != string(second.ConfigYAML) {
+		t.Errorf("config not byte-identical across builds:\n--- first ---\n%s\n--- second ---\n%s",
+			first.ConfigYAML, second.ConfigYAML)
+	}
+}
+
+func TestBuild_CORSOrigins_ConfidentialClient(t *testing.T) {
+	// The flag is not gated on public: a confidential client that opts in gets
+	// its origins derived too.
+	clients := []dexv1.DexStaticClient{{
+		ObjectMeta: metav1.ObjectMeta{Name: "grafana", Namespace: "ns"},
+		Spec: dexv1.DexStaticClientSpec{
+			InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
+			SecretRef:       &dexv1.StaticClientSecretRef{Name: "grafana-oidc"},
+			DisplayName:     "Grafana",
+			RedirectURIs:    []string{"https://grafana.example.com/login/generic_oauth"},
+			CORS:            true,
+		},
+	}}
+
+	out, err := builder.Build(context.Background(), builder.Input{
+		Installation:  minimalInstallation("ns"),
+		StaticClients: clients,
+		Secrets: mockResolver(map[string]string{
+			"ns/grafana-oidc[client-id]":     "grafana",
+			"ns/grafana-oidc[client-secret]": "verysecret",
+		}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertOrigins(t, allowedOrigins(t, parseYAML(t, out.ConfigYAML)),
+		[]string{"https://grafana.example.com"})
+}
+
 // ── Build: SAML connector with CA mount ───────────────────────────────────────
 
 func TestBuild_SAMLConnector_CACertMounted(t *testing.T) {

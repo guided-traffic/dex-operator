@@ -98,7 +98,7 @@ File map:
 
 | File | Responsibility |
 |---|---|
-| [builder.go](internal/builder/builder.go) | orchestration, `assembleDexConfig`, secret/mount helpers, `connectorID` (spec.id → metadata.name fallback) |
+| [builder.go](internal/builder/builder.go) | orchestration, `assembleDexConfig`/`assembleWebConfig`, CORS origin derivation (`deriveCORSOrigins`), secret/mount helpers, `connectorID` (spec.id → metadata.name fallback) |
 | [config_types.go](internal/builder/config_types.go) | YAML-tagged structs mirroring Dex's `config.yaml` schema |
 | [envvar.go](internal/builder/envvar.go) | env var naming: `sanitizeEnvKey` (uppercase, non-alnum → `_`), `connectorEnvKey`, `clientEnvKey`, `storageEnvKey` |
 | [clients.go](internal/builder/clients.go) | static clients: confidential vs. public branch, env-key collision detection, `secretEnv` wiring |
@@ -124,6 +124,18 @@ There is **no admission webhook** in this repo. All conditional validation is do
 3. `(has(self.public) && self.public) || (has(self.redirectURIs) && self.redirectURIs.size() > 0)` — confidential needs `redirectURIs`; public clients may omit them and get Dex's loopback/OOB/device-flow defaults.
 
 `public` carries `omitempty` and no default, so the rules must guard with `has(self.public)` — a bare `self.public` would error on objects that never set it. The rules are covered by envtest integration tests (the envtest apiserver enforces CEL).
+
+## Derived CORS Origins
+
+`spec.cors` on a `DexStaticClient` opts that client into contributing the origins of its own https `redirectURIs` to the installation's `web.allowedOrigins`. `deriveCORSOrigins` runs in `Build` over the *spec-level* clients (before `buildStaticClients` flattens them — Dex has no per-client CORS, so nothing lands in the rendered `staticClients` entry) and `assembleWebConfig` merges the result.
+
+Design decisions worth knowing before touching this:
+
+- **Only https, and only the client's own redirect URIs.** Loopback/http targets, custom schemes and the OOB URN belong to native clients and are skipped; unparsable URIs are skipped rather than failing the build, so one malformed tenant resource cannot break the render for every other client. See [SECURITY_ARCHITECTURE.md](SECURITY_ARCHITECTURE.md#tenant-registered-cors-origins-cors-true) for why the flag grants no authority beyond `redirectURIs`.
+- **The authored list keeps its order**, derived origins are appended sorted (`appendDerivedOrigins`). Sorting the whole union would rewrite existing `spec.web.allowedOrigins` lists on an operator upgrade alone → config diff → spurious dex rollout. The sorted tail is what makes the output independent of client iteration order.
+- **`spec.web == nil` + derived origins creates the `web:` block** with only `allowedOrigins`. Safe because helm-chart deployments pass `--web-http-addr`/`--web-https-addr` as CLI flags, applied after config load.
+- **Hosts are lowercased and a redundant `:443` dropped.** Dex matches the `Origin` header literally (`gorilla/handlers.AllowedOrigins`); without normalization a mixed-case host or explicit default port renders an entry that can never match.
+- **The flag is not gated on `public`.** A confidential client that sets it gets its origins derived too — no hidden conditional to debug.
 
 ## Adding a New Connector Type
 

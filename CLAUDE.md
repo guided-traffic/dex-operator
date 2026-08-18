@@ -68,6 +68,32 @@ v2.24.0). The two are mutually exclusive; `buildOneStaticClient` branches on
 `SecretRef == nil` and then skips secret resolution, the env-key collision check and
 the `EnvSecretData` entry entirely, leaving `secretEnv` unset in the config.
 
+### Derived CORS origins (`spec.cors`)
+
+`DexStaticClientSpec.CORS` (bool, `json:"cors,omitempty"`) opts a client into
+contributing the origins of its own **https** `redirectURIs` to the
+installation's `web.allowedOrigins`. `deriveCORSOrigins` runs in `Build` over
+the spec-level clients; `assembleWebConfig` merges the result. Nothing lands in
+the rendered `staticClients` entry — dex has no per-client CORS.
+
+Decisions (asked and settled, do not silently revert):
+
+- **Installation order preserved**, derived origins appended sorted
+  (`appendDerivedOrigins`). Sorting the whole union would rewrite existing
+  authored lists on an operator upgrade alone → config diff → spurious dex
+  rollout.
+- **https only.** Loopback/http, custom schemes, OOB URN skipped; unparsable
+  URIs skipped instead of failing the whole render.
+- **Host lowercased, redundant `:443` dropped** — dex matches the `Origin`
+  header literally via `gorilla/handlers.AllowedOrigins`.
+- **Not gated on `public`** — a confidential client with the flag derives too.
+- `spec.web == nil` + derived origins creates the `web:` block (listener
+  addresses come from the dex chart's CLI flags, applied after config load).
+
+Consumer follow-ups (k8s-flux-base chart bump, k8s-flux-mgmt `cors: true`) are
+documented in `local_web_origins.md` §6 and deliberately **not** done here —
+they need a released operator first.
+
 There is no admission webhook in this repo. All conditional validation is done with
 **CEL markers** (`+kubebuilder:validation:XValidation`) on the spec struct:
 
