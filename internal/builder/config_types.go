@@ -16,6 +16,13 @@ limitations under the License.
 
 package builder
 
+// Map keys that recur across rendered connector and storage config blocks.
+const (
+	cfgKeyHost         = "host"
+	cfgKeyClientID     = "clientID"
+	cfgKeyClientSecret = "clientSecret"
+)
+
 // DexConfig is the top-level Dex configuration structure written to the
 // config Secret. It mirrors the official Dex config.yaml schema.
 type DexConfig struct {

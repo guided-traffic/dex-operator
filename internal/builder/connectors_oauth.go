@@ -247,8 +247,8 @@ func buildGitHubConnector(
 	}
 
 	cfg := map[string]any{
-		"clientID":     clientID,
-		"clientSecret": csRef,
+		cfgKeyClientID:     clientID,
+		cfgKeyClientSecret: csRef,
 	}
 
 	if c.Spec.RedirectURI != "" {
@@ -306,8 +306,8 @@ func buildGitLabConnector(
 	}
 
 	cfg := map[string]any{
-		"clientID":     clientID,
-		"clientSecret": csRef,
+		cfgKeyClientID:     clientID,
+		cfgKeyClientSecret: csRef,
 	}
 
 	if c.Spec.BaseURL != "" {
@@ -341,8 +341,8 @@ func buildGoogleConnector(
 	}
 
 	cfg := map[string]any{
-		"clientID":     clientID,
-		"clientSecret": csRef,
+		cfgKeyClientID:     clientID,
+		cfgKeyClientSecret: csRef,
 	}
 
 	if c.Spec.RedirectURI != "" {
@@ -386,8 +386,8 @@ func buildLinkedInConnector(
 	}
 
 	cfg := map[string]any{
-		"clientID":     clientID,
-		"clientSecret": csRef,
+		cfgKeyClientID:     clientID,
+		cfgKeyClientSecret: csRef,
 	}
 	if c.Spec.RedirectURI != "" {
 		cfg["redirectURI"] = c.Spec.RedirectURI
@@ -412,8 +412,8 @@ func buildMicrosoftConnector(
 	}
 
 	cfg := map[string]any{
-		"clientID":     clientID,
-		"clientSecret": csRef,
+		cfgKeyClientID:     clientID,
+		cfgKeyClientSecret: csRef,
 	}
 
 	if c.Spec.RedirectURI != "" {
@@ -453,9 +453,9 @@ func buildOIDCConnector(
 	}
 
 	cfg := map[string]any{
-		"issuer":       c.Spec.Issuer,
-		"clientID":     clientID,
-		"clientSecret": csRef,
+		"issuer":           c.Spec.Issuer,
+		cfgKeyClientID:     clientID,
+		cfgKeyClientSecret: csRef,
 	}
 
 	applyOIDCOptionalFields(cfg, c.Spec)
@@ -541,8 +541,8 @@ func buildOAuth2Connector(
 	}
 
 	cfg := map[string]any{
-		"clientID":         clientID,
-		"clientSecret":     csRef,
+		cfgKeyClientID:     clientID,
+		cfgKeyClientSecret: csRef,
 		"authorizationURL": c.Spec.AuthorizationURL,
 		"tokenURL":         c.Spec.TokenURL,
 	}
@@ -610,9 +610,9 @@ func buildOpenShiftConnector(
 	}
 
 	cfg := map[string]any{
-		"issuer":       c.Spec.Issuer,
-		"clientID":     clientID,
-		"clientSecret": csRef,
+		"issuer":           c.Spec.Issuer,
+		cfgKeyClientID:     clientID,
+		cfgKeyClientSecret: csRef,
 	}
 
 	if c.Spec.RedirectURI != "" {
@@ -649,9 +649,9 @@ func buildAtlassianCrowdConnector(
 	}
 
 	cfg := map[string]any{
-		"baseURL":      c.Spec.BaseURL,
-		"clientID":     clientID,
-		"clientSecret": csRef,
+		"baseURL":          c.Spec.BaseURL,
+		cfgKeyClientID:     clientID,
+		cfgKeyClientSecret: csRef,
 	}
 
 	if len(c.Spec.Groups) > 0 {
@@ -683,9 +683,9 @@ func buildGiteaConnector(
 	}
 
 	cfg := map[string]any{
-		"baseURL":      c.Spec.BaseURL,
-		"clientID":     clientID,
-		"clientSecret": csRef,
+		"baseURL":          c.Spec.BaseURL,
+		cfgKeyClientID:     clientID,
+		cfgKeyClientSecret: csRef,
 	}
 
 	if c.Spec.RedirectURI != "" {
@@ -732,8 +732,8 @@ func buildBitbucketConnector(
 	}
 
 	cfg := map[string]any{
-		"clientID":     clientID,
-		"clientSecret": csRef,
+		cfgKeyClientID:     clientID,
+		cfgKeyClientSecret: csRef,
 	}
 
 	if c.Spec.RedirectURI != "" {

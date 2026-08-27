@@ -80,7 +80,7 @@ func buildLDAPConnector(
 	envs map[string][]byte,
 ) (ConnectorEntry, []MountedSecret, error) {
 	id := connectorID(c.Name, c.Spec.ID)
-	cfg := map[string]any{"host": c.Spec.Host}
+	cfg := map[string]any{cfgKeyHost: c.Spec.Host}
 	var mounts []MountedSecret
 
 	applyLDAPBoolFlags(cfg, c.Spec)
