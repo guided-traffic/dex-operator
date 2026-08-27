@@ -89,7 +89,7 @@ func buildPostgresConfig(
 	envs map[string][]byte,
 ) (map[string]any, []MountedSecret, error) {
 	cfg := map[string]any{
-		"host":     s.Host,
+		cfgKeyHost: s.Host,
 		"database": s.Database,
 		"user":     s.User,
 	}
@@ -251,7 +251,7 @@ func buildMySQLConfig(
 	envs map[string][]byte,
 ) (map[string]any, []MountedSecret, error) {
 	cfg := map[string]any{
-		"host":     s.Host,
+		cfgKeyHost: s.Host,
 		"database": s.Database,
 		"user":     s.User,
 	}

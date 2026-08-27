@@ -215,7 +215,7 @@ coverage-json: ## Generate coverage badge JSON for shields.io.
 .PHONY: gosec
 gosec: ## Run gosec security scan.
 	@echo "Running gosec security scan..."
-	@which gosec > /dev/null || (echo "Installing gosec..." && go install github.com/securego/gosec/v2/cmd/gosec@v2.22.0)
+	@which gosec > /dev/null || (echo "Installing gosec..." && go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0)
 	GOFLAGS="-buildvcs=false" gosec ./...
 
 .PHONY: vuln
@@ -296,7 +296,7 @@ GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
 KUSTOMIZE_VERSION ?= v5.3.0
 CONTROLLER_GEN_VERSION ?= v0.17.3
 ENVTEST_VERSION ?= release-0.19
-GOLANGCI_LINT_VERSION ?= v2.1.6
+GOLANGCI_LINT_VERSION ?= v2.13.1
 GOCYCLO_VERSION ?= v0.6.0
 
 # Cyclomatic complexity threshold (recommended: 10-15)
