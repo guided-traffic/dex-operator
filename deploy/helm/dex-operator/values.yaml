@@ -62,7 +62,7 @@ healthProbeBindAddress: ":8081"
 crdUpgradeJob:
   image:
     repository: guidedtraffic/kubectl
-    tag: "1.36"
+    tag: "1.37"
     pullPolicy: IfNotPresent
   resources:
     limits:
