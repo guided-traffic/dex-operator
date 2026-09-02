@@ -1,6 +1,6 @@
 module github.com/guided-traffic/dex-operator
 
-go 1.27.0
+go 1.27.1
 
 require (
 	gopkg.in/yaml.v3 v3.0.1
