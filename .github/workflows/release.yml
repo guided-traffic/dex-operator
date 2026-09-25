@@ -830,11 +830,23 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
+      # GitHub App installation token (guided-traffic-automation), not
+      # GITHUB_TOKEN: a release created with GITHUB_TOKEN does not start the
+      # "Release Docker & Helm" workflow. Scoped to this repository; expires
+      # after 1 h and is revoked at the end of the job.
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: write  # tag, release, @semantic-release/git commit
+
       - name: Checkout
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          token: ${{ secrets.BOT_PAT }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Download coverage badge
         uses: actions/download-artifact@v8
@@ -865,5 +877,5 @@ jobs:
 
       - name: Release
         env:
-          GITHUB_TOKEN: ${{ secrets.BOT_PAT }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: npx semantic-release
