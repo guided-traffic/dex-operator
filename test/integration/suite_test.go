@@ -185,7 +185,8 @@ func createSecret(t *testing.T, ns, name string, data map[string][]byte) {
 }
 
 // createInstallation creates a minimal DexInstallation and registers cleanup.
-func createInstallation(t *testing.T, ns, name string, allowedNamespaces []string) *dexv1.DexInstallation {
+// Optional mutators adjust the spec before creation.
+func createInstallation(t *testing.T, ns, name string, allowedNamespaces []string, mutators ...func(*dexv1.DexInstallationSpec)) *dexv1.DexInstallation {
 	t.Helper()
 	ctx := context.Background()
 	inst := &dexv1.DexInstallation{
@@ -199,6 +200,9 @@ func createInstallation(t *testing.T, ns, name string, allowedNamespaces []strin
 				Type: dexv1.StorageKubernetes,
 			},
 		},
+	}
+	for _, mutate := range mutators {
+		mutate(&inst.Spec)
 	}
 	if err := k8sClient.Create(ctx, inst); err != nil {
 		t.Fatalf("create installation %s/%s: %v", ns, name, err)
@@ -217,6 +221,13 @@ func getSecret(ns, name string) *corev1.Secret {
 		return nil
 	}
 	return &s
+}
+
+// withConnectorNamespaces sets spec.allowedConnectorNamespaces.
+func withConnectorNamespaces(namespaces ...string) func(*dexv1.DexInstallationSpec) {
+	return func(spec *dexv1.DexInstallationSpec) {
+		spec.AllowedConnectorNamespaces = namespaces
+	}
 }
 
 // findCondition returns the condition with condType or nil.

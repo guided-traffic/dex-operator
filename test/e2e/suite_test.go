@@ -18,10 +18,14 @@ limitations under the License.
 
 // Package e2e contains end-to-end tests for the dex-operator.
 // These tests run against a real Kubernetes cluster (e.g. Kind) with the
-// dex-operator already deployed. Set KUBECONFIG to point to the target cluster,
-// or rely on the default ~/.kube/config.
+// dex-operator already deployed. The suite always targets the kube context
+// "kind-dex-operator-test" (the cluster created by make kind-create,
+// make e2e-local and CI), read from $KUBECONFIG or ~/.kube/config. It never
+// follows the current context, so it cannot run against an unrelated cluster.
 //
-// Tests skip automatically when the dex-operator CRDs are not installed.
+// Tests skip automatically when no cluster is reachable or the dex-operator
+// CRDs are not installed, unless E2E_TESTS=true is set (as in CI): then
+// either condition fails the run instead of passing it without testing.
 package e2e
 
 import (
@@ -35,6 +39,7 @@ import (
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -45,12 +50,15 @@ import (
 var e2eClient client.Client
 
 const (
+	// e2eKubeContext is the only kube context the suite runs against.
+	e2eKubeContext = "kind-dex-operator-test"
+
 	e2ePollInterval = 500 * time.Millisecond
 	e2ePollTimeout  = 120 * time.Second
 )
 
 // TestMain sets up the shared Kubernetes client.  If no cluster is reachable,
-// all tests are skipped.
+// all tests are skipped (see [skipOrFail] for E2E_TESTS=true).
 func TestMain(m *testing.M) {
 	scheme := k8sruntime.NewScheme()
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
@@ -60,11 +68,9 @@ func TestMain(m *testing.M) {
 		panic("scheme: " + err.Error())
 	}
 
-	kubeconfig := os.Getenv("KUBECONFIG")
-	cfg, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	cfg, err := kindRestConfig()
 	if err != nil {
-		// No cluster available — skip gracefully.
-		os.Exit(0)
+		skipOrFail("kube context " + e2eKubeContext + " not usable: " + err.Error())
 	}
 
 	e2eClient, err = client.New(cfg, client.Options{Scheme: scheme})
@@ -75,11 +81,35 @@ func TestMain(m *testing.M) {
 	// Verify that the CRDs are installed by listing DexInstallations in the
 	// default namespace.  If this call fails, the operator isn't deployed.
 	if !crdsInstalled() {
-		_, _ = os.Stderr.WriteString("dex-operator CRDs not installed; skipping E2E tests\n")
-		os.Exit(0)
+		skipOrFail("dex-operator CRDs not installed at " + cfg.Host)
 	}
 
 	os.Exit(m.Run())
+}
+
+// kindRestConfig loads $KUBECONFIG, else ~/.kube/config, and builds the
+// client config for e2eKubeContext. Unlike BuildConfigFromFlags("", "") or
+// the deferred loader, it never falls back to the in-cluster config, which on
+// a runner pod would target the runner's own cluster instead of Kind.
+func kindRestConfig() (*rest.Config, error) {
+	raw, err := clientcmd.NewDefaultClientConfigLoadingRules().Load()
+	if err != nil {
+		return nil, err
+	}
+	return clientcmd.NewDefaultClientConfig(*raw,
+		&clientcmd.ConfigOverrides{CurrentContext: e2eKubeContext},
+	).ClientConfig()
+}
+
+// skipOrFail ends the run before any test starts. With E2E_TESTS=true the
+// environment promised a cluster, so the run fails; otherwise it is skipped.
+func skipOrFail(reason string) {
+	if os.Getenv("E2E_TESTS") == "true" {
+		_, _ = os.Stderr.WriteString(reason + "; failing because E2E_TESTS=true\n")
+		os.Exit(1)
+	}
+	_, _ = os.Stderr.WriteString(reason + "; skipping E2E tests\n")
+	os.Exit(0)
 }
 
 // crdsInstalled returns true if DexInstallation CRDs are present in the cluster.

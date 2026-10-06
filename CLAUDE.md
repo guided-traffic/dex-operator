@@ -17,7 +17,7 @@ Dex wird weiterhin über das offizielle Dex Helm Chart installiert. Der Operator
 
 ### DexInstallation
 Vollständige globale Dex-Konfiguration: Issuer, Storage, Web (inkl. CORS `allowedOrigins`/`allowedHeaders`), gRPC, Logger, Expiry.
-Zusätzlich: `configSecretName`, `envSecretName`, `allowedNamespaces` (Whitelist, `"*"` = alle), optionaler Auto-Restart (`rolloutRestart.enabled`, `rolloutRestart.deploymentName`).
+Zusätzlich: `configSecretName`, `envSecretName`, `allowedNamespaces` (Allowlist **nur für DexStaticClients**, `"*"` = alle, leer/fehlend = keine), `allowedConnectorNamespaces` (Allowlist **nur für Connectors**; fehlend = nur der eigene Namespace der Installation; gesetzt = abschließend; `"*"` nur als einziger Eintrag, `[]` per `MinItems=1` abgelehnt), optionaler Auto-Restart (`rolloutRestart.enabled`, `rolloutRestart.deploymentName`).
 
 ### DexStaticClient
 Referenziert eine DexInstallation per Name+Namespace. Enthält `redirectURIs`, `trustedPeers`, `displayName`, `public`.
@@ -31,7 +31,8 @@ Jede referenziert eine DexInstallation per Name+Namespace und enthält die typ-s
 - Operator watched alle Namespaces
 - Bei Reconciliation einer DexInstallation: Alle zugehörigen Connectors und Static Clients aus erlaubten Namespaces sammeln, Config-YAML + Env-Secret bauen, Secrets im Dex-Namespace schreiben
 - Bei Reconciliation eines Clients/Connectors: Die referenzierte DexInstallation triggern
-- Namespace-Whitelist-Validierung bei jedem Client/Connector
+- Namespace-Allowlist-Validierung bei jedem Client/Connector (Kategorie-abhängig: `checkChildNamespace` in `internal/controller/namespace.go`)
+- Child-Reconciler watchen zusätzlich `DexInstallation` (nur Generation-Änderungen) und re-evaluieren den `Ready`-Status der referenzierenden Children (`mapInstallationToChildren`); der DexInstallation-Controller muss zuerst aufgesetzt werden, weil er den `InstallationRefIndexField`-Index registriert
 - Optionaler Rollout-Restart des Dex-Deployments bei Config-Änderung
 
 ## Repository & Registry

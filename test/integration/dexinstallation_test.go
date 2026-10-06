@@ -202,9 +202,10 @@ func TestIntegration_StatusConnectorCount(t *testing.T) {
 	}, "connector count should be 1 after adding OIDC connector")
 }
 
-// TestIntegration_AllowedNamespacesFilter verifies that connectors in
-// disallowed namespaces are excluded from the rendered config.
-func TestIntegration_AllowedNamespacesFilter(t *testing.T) {
+// TestIntegration_AllowedConnectorNamespacesFilter verifies that connectors
+// in namespaces not listed in allowedConnectorNamespaces are excluded from
+// the rendered config, even when allowedNamespaces admits every namespace.
+func TestIntegration_AllowedConnectorNamespacesFilter(t *testing.T) {
 	nsInst := "it-ns-inst"
 	nsAllowed := "it-ns-allowed"
 	nsForbidden := "it-ns-forbidden"
@@ -212,8 +213,8 @@ func TestIntegration_AllowedNamespacesFilter(t *testing.T) {
 		createNamespace(t, ns)
 	}
 
-	// Installation only allows nsAllowed.
-	inst := createInstallation(t, nsInst, "dex", []string{nsAllowed})
+	// Static clients from everywhere, connectors only from nsAllowed.
+	inst := createInstallation(t, nsInst, "dex", []string{"*"}, withConnectorNamespaces(nsAllowed))
 
 	// Create a connector in the allowed namespace.
 	createSecret(t, nsAllowed, "oidc-creds-allowed", map[string][]byte{

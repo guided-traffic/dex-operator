@@ -63,11 +63,27 @@ spec:
           spec:
             description: DexInstallationSpec defines the desired state of DexInstallation.
             properties:
+              allowedConnectorNamespaces:
+                description: |-
+                  AllowedConnectorNamespaces is a list of namespaces from which
+                  connectors can reference this installation. When omitted, only the
+                  installation's own namespace is allowed. When set, the list is
+                  exhaustive: the installation's own namespace is allowed only if it is
+                  listed. Use ["*"] to allow all namespaces.
+                items:
+                  type: string
+                minItems: 1
+                type: array
+                x-kubernetes-list-type: set
+                x-kubernetes-validations:
+                - message: '"*" must be the only entry'
+                  rule: '!self.exists(n, n == ''*'') || self.size() == 1'
               allowedNamespaces:
                 description: |-
-                  AllowedNamespaces is a list of namespaces from which Connectors and
-                  StaticClients can reference this installation.
-                  Use ["*"] to allow all namespaces.
+                  AllowedNamespaces is a list of namespaces from which DexStaticClients
+                  can reference this installation. Use ["*"] to allow all namespaces.
+                  An empty or omitted list denies all. Connectors are governed by
+                  AllowedConnectorNamespaces.
                 items:
                   type: string
                 type: array

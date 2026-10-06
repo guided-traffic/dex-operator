@@ -128,7 +128,8 @@ type connectorCollector struct {
 }
 
 // collectConnectors fetches all connectors for the given installation from
-// allowed namespaces and assembles a [builder.ConnectorSet].
+// the namespaces admitted by its connector allowlist (see
+// [connectorNamespaces]) and assembles a [builder.ConnectorSet].
 func collectConnectors(
 	ctx context.Context,
 	c client.Reader,
@@ -139,7 +140,7 @@ func collectConnectors(
 		ctx:     ctx,
 		c:       c,
 		match:   client.MatchingFields{InstallationRefIndexField: key},
-		allowed: installation.Spec.AllowedNamespaces,
+		allowed: connectorNamespaces(installation),
 	}
 
 	cs := builder.ConnectorSet{
@@ -267,7 +268,7 @@ func doList[T any, PT interface {
 }
 
 // collectStaticClients fetches all DexStaticClient resources for the
-// installation from allowed namespaces.
+// installation from the namespaces admitted by spec.allowedNamespaces.
 func collectStaticClients(
 	ctx context.Context,
 	c client.Reader,

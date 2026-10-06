@@ -126,3 +126,40 @@ func TestFilterStaticClients_EmptyAllowedDeniesAll(t *testing.T) {
 		t.Errorf("expected nil for empty allowed list, got %v", clientKeys(got))
 	}
 }
+
+// oidcConnector builds a DexOIDCConnector with the given namespace and name.
+func oidcConnector(namespace, name string) dexv1.DexOIDCConnector {
+	return dexv1.DexOIDCConnector{
+		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name},
+	}
+}
+
+// TestFilterConnectors_DefaultAllowlistSortsDeterministically covers the
+// connector path with allowedConnectorNamespaces omitted: the effective list
+// is the installation namespace alone, which must keep exactly the connectors
+// living there, in stable namespace/name order, whatever the input order.
+func TestFilterConnectors_DefaultAllowlistSortsDeterministically(t *testing.T) {
+	inst := &dexv1.DexInstallation{
+		ObjectMeta: metav1.ObjectMeta{Name: "main", Namespace: "dex"},
+		Spec:       dexv1.DexInstallationSpec{AllowedNamespaces: []string{"*"}},
+	}
+	allowed := controller.ConnectorNamespaces(inst)
+	want := []string{"dex/github", "dex/okta", "dex/zitadel"}
+
+	perms := [][]dexv1.DexOIDCConnector{
+		{oidcConnector("dex", "zitadel"), oidcConnector("tenant", "rogue"), oidcConnector("dex", "github"), oidcConnector("dex", "okta")},
+		{oidcConnector("dex", "okta"), oidcConnector("dex", "github"), oidcConnector("dex", "zitadel"), oidcConnector("tenant", "rogue")},
+		{oidcConnector("tenant", "rogue"), oidcConnector("dex", "github"), oidcConnector("dex", "zitadel"), oidcConnector("dex", "okta")},
+	}
+
+	for i, perm := range perms {
+		filtered := controller.FilterOIDCConnectors(perm, allowed)
+		got := make([]string, len(filtered))
+		for j, c := range filtered {
+			got[j] = c.Namespace + "/" + c.Name
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("permutation %d: got %v, want %v", i, got, want)
+		}
+	}
+}

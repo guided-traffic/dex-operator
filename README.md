@@ -41,7 +41,7 @@ flowchart LR
 - 🧩 **Declarative Dex configuration** — 18 namespace-scoped CRDs under `dex.gtrfc.com/v1`; no hand-written `config.yaml`
 - 🔌 **16 connector types** — LDAP, OIDC, SAML, GitHub, GitLab, Google, Microsoft, and more, each with its own strongly-typed CRD
 - 🔐 **No secrets in Custom Resources** — credentials stay in Kubernetes Secrets and are referenced by name/key; client secrets are injected into Dex as environment variables, never written in plaintext into the rendered config
-- 🏢 **Multi-tenant by design** — apps register their own OAuth2 clients and connectors from their own namespaces; a per-installation namespace allowlist controls who may contribute
+- 🏢 **Multi-tenant by design** — apps register their own OAuth2 clients from their own namespaces; two per-installation allowlists decide who may contribute clients and who may contribute connectors (connectors default to the installation's own namespace)
 - 🚦 **Public (PKCE) and confidential clients** — secretless static clients for CLIs/SPAs, validated at admission time via CEL rules (no webhook needed)
 - 🔁 **Live reconfiguration** — changes to any CR or referenced Secret re-render the config; optional automatic rollout restart of the Dex Deployment
 - 👀 **Secret rotation aware** — the operator watches referenced Secrets and reacts to credential rotations automatically
@@ -154,7 +154,8 @@ spec:
     type: kubernetes
   configSecretName: dex-config
   envSecretName: dex-env
-  allowedNamespaces: ["*"]
+  allowedNamespaces: ["*"]   # static clients from every namespace
+  # allowedConnectorNamespaces omitted: connectors only from "dex"
   rolloutRestart:
     enabled: true
     deploymentName: dex
@@ -267,13 +268,31 @@ helm upgrade dex-operator dex-operator/dex-operator \
 helm uninstall dex-operator --namespace dex-operator-system
 ```
 
+**Upgrading to the release that introduces `allowedConnectorNamespaces`:**
+`allowedNamespaces` no longer admits connectors; it governs static clients
+only. Connectors are admitted by `allowedConnectorNamespaces`, which defaults
+to the `DexInstallation`'s own namespace. Check before upgrading:
+
+- Connectors in a namespace **other than** the installation's own are dropped
+  from the config on upgrade and report `Ready=False` with
+  `... allowedConnectorNamespaces (omitted: only "<ns>" is allowed)`. List
+  their namespaces in `allowedConnectorNamespaces` (and the installation's own
+  namespace too, if connectors live there).
+- Connectors in the installation's **own** namespace that the old
+  `allowedNamespaces` excluded become **active** on upgrade, because the new
+  default admits that namespace. Delete such connectors before upgrading if
+  they are not meant to be used.
+- Installations whose connectors all live in the installation's own namespace,
+  and whose `allowedNamespaces` admitted it, render byte-identical config: no
+  config diff, no Dex rollout.
+
 </details>
 
 ## 📖 Custom Resource Reference
 
 Shared concepts for all resources:
 
-- **`installationRef`** — every connector and static client references exactly one `DexInstallation` by `name` + `namespace`. Resources from namespaces not covered by that installation's `allowedNamespaces` are ignored and marked with an error condition.
+- **`installationRef`** — every connector and static client references exactly one `DexInstallation` by `name` + `namespace`. Static clients must come from a namespace in that installation's `allowedNamespaces`, connectors from a namespace in its `allowedConnectorNamespaces` (default: the installation's own namespace). Resources from other namespaces are ignored and marked with `Ready=False`; the condition follows allowlist changes on the installation.
 - **`id`** (connectors) — the Dex connector ID; defaults to `metadata.name`.
 - **`displayName`** — the human-readable name shown on the Dex login/approval screen.
 - **`*Ref` fields** — `{name, key}` references to Kubernetes Secrets **in the same namespace** as the referencing resource.
@@ -403,12 +422,25 @@ spec:
   configSecretName: dex-config        # required — Secret receiving config.yaml
   envSecretName: dex-env              # required — Secret receiving all env vars
 
-  # Security: THE central tenancy control. Only connectors/clients from these
-  # namespaces are included. Empty/omitted = deny all. "*" = allow every
+  # Security: tenancy control for STATIC CLIENTS only. Only DexStaticClients
+  # from these namespaces are included. Empty/omitted = deny all (the
+  # installation's own namespace is not implied). "*" = allow every
   # namespace — combine with RBAC on the CRDs (see SECURITY_ARCHITECTURE.md).
   allowedNamespaces:
     - monitoring                      # example
     - team-a                          # example
+
+  # Security: tenancy control for CONNECTORS (all 16 kinds). A connector adds
+  # an identity source whose users every client of this installation accepts,
+  # so admitting a namespace here trusts it with identity issuance for the
+  # whole installation. Omitted = only this installation's namespace (default
+  # behaviour, no entry needed). Once set, the list is exhaustive: list the
+  # own namespace too if connectors live there. "*" must be the only entry;
+  # [] is rejected. Exact names only; a listed namespace that does not exist
+  # yet admits whoever creates it first.
+  allowedConnectorNamespaces:
+    - dex                             # example
+    - platform-idp                    # example
 
   rolloutRestart:
     enabled: true                     # example (default: false) — restart Dex
