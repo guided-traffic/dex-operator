@@ -39,12 +39,14 @@ Technical walkthrough of the dex-operator codebase: where things live, what each
 Two controller kinds cooperate:
 
 1. **`DexInstallationReconciler`** ([internal/controller/dexinstallation_controller.go](internal/controller/dexinstallation_controller.go)) — owns the actual output. On every reconcile it collects all child resources, calls the builder, and applies the config/env Secrets.
-2. **`GenericChildReconciler[T, U]`** ([internal/controller/child_reconciler.go](internal/controller/child_reconciler.go)) — one generic instance per child CRD (16 connectors + `DexStaticClient`, registered in [connector_controller.go](internal/controller/connector_controller.go)). It only validates (installation exists, namespace allowed) and maintains the child's `Ready` condition. It does **not** build anything.
+2. **`GenericChildReconciler[T, U]`** ([internal/controller/child_reconciler.go](internal/controller/child_reconciler.go)) — one generic instance per child CRD (16 connectors + `DexStaticClient`, registered in [connector_controller.go](internal/controller/connector_controller.go)). It only validates (installation exists, namespace allowed) and maintains the child's `Ready` condition. It does **not** build anything. Which allowlist applies depends on the kind: `DexStaticClient` uses `allowedNamespaces`, every connector kind the effective connector list (`connectorNamespaces`: `allowedConnectorNamespaces`, or only the installation's own namespace when omitted). Both live as pure functions in [namespace.go](internal/controller/namespace.go) (`checkChildNamespace`).
 
 Config regeneration is always funneled through the installation reconciler via watches:
 
 - every child CRD type is watched and mapped to its `spec.installationRef` (`mapChildToInstallation`)
 - referenced Secrets are watched via a field index (`SecretRefIndexField`); create/update events map back to the owning installations (`mapSecretToInstallation` in [secret_watch.go](internal/controller/secret_watch.go)). Secret **deletes are intentionally ignored** — during credential rotation the replacement Secret triggers the reconcile; reacting to the delete would only produce a failing loop.
+
+The reverse direction exists for child status only: every `GenericChildReconciler` also watches `DexInstallation` and enqueues the children of its kind that reference it (`mapInstallationToChildren`, via the `InstallationRefIndexField` index). Without it, a child keeps a stale `Ready` condition after an allowlist edit until its own next event. The watch passes only generation changes (spec edits), creates and deletes (`GenerationChangedPredicate`), so the installation's status updates do not fan out to all children. The index is registered by `DexInstallationReconciler.SetupWithManager`, so that controller must be set up first ([cmd/main.go](cmd/main.go) and the integration suite do).
 
 ### Reconciliation flow (DexInstallation)
 
@@ -53,6 +55,8 @@ Reconcile
  ├─ collectConnectors / collectStaticClients   (collect.go)
  │    ├─ List via field index .spec.installationRef == "<ns>/<name>"
  │    ├─ filterItems: namespace allowlist (empty = deny all, "*" = all)
+│    │    connectors: connectorNamespaces (omitted = own namespace only)
+│    │    static clients: allowedNamespaces
  │    └─ sortByNamespaceName: deterministic order (see below)
  ├─ builder.Build(Input)                        (internal/builder)
  │    └─ resolves SecretKeyRefs via injected SecretResolver

@@ -958,6 +958,11 @@ func (in *DexInstallationSpec) DeepCopyInto(out *DexInstallationSpec) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.AllowedConnectorNamespaces != nil {
+		in, out := &in.AllowedConnectorNamespaces, &out.AllowedConnectorNamespaces
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.RolloutRestart != nil {
 		in, out := &in.RolloutRestart, &out.RolloutRestart
 		*out = new(RolloutRestartSpec)

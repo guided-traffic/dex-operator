@@ -235,8 +235,8 @@ func TestE2E_StaticClient(t *testing.T) {
 	}, "StaticClientCount should be >= 2")
 }
 
-// TestE2E_NamespaceIsolation verifies that only connectors from allowed
-// namespaces are included in the rendered config.
+// TestE2E_NamespaceIsolation verifies that only connectors from namespaces
+// listed in allowedConnectorNamespaces are included in the rendered config.
 func TestE2E_NamespaceIsolation(t *testing.T) {
 	nsInst := "e2e-ns-inst"
 	nsAllowed := "e2e-ns-allowed"
@@ -248,11 +248,11 @@ func TestE2E_NamespaceIsolation(t *testing.T) {
 	inst := &dexv1.DexInstallation{
 		ObjectMeta: metav1.ObjectMeta{Name: "dex", Namespace: nsInst},
 		Spec: dexv1.DexInstallationSpec{
-			Issuer:            "https://dex.e2e-ns.example.com",
-			ConfigSecretName:  "dex-config",
-			EnvSecretName:     "dex-env",
-			AllowedNamespaces: []string{nsAllowed}, // only nsAllowed
-			Storage:           dexv1.DexStorageSpec{Type: dexv1.StorageKubernetes},
+			Issuer:                     "https://dex.e2e-ns.example.com",
+			ConfigSecretName:           "dex-config",
+			EnvSecretName:              "dex-env",
+			AllowedConnectorNamespaces: []string{nsAllowed}, // connectors only from nsAllowed
+			Storage:                    dexv1.DexStorageSpec{Type: dexv1.StorageKubernetes},
 		},
 	}
 	if err := e2eClient.Create(context.Background(), inst); err != nil {
@@ -310,6 +310,79 @@ func TestE2E_NamespaceIsolation(t *testing.T) {
 	s := e2eGetSecret(nsInst, "dex-config")
 	if s != nil && strings.Contains(string(s.Data["config.yaml"]), "forbidden.e2e.example.com") {
 		t.Error("forbidden connector appeared in config.yaml")
+	}
+}
+
+// TestE2E_ConnectorNamespaceDefault verifies the connector default: with
+// allowedConnectorNamespaces omitted, a connector in the installation's own
+// namespace is rendered, while a connector from a namespace that
+// allowedNamespaces admits for static clients is not and reports Ready=False.
+func TestE2E_ConnectorNamespaceDefault(t *testing.T) {
+	nsInst := "e2e-cns-inst"
+	nsTenant := "e2e-cns-tenant"
+	for _, ns := range []string{nsInst, nsTenant} {
+		e2eCreateNamespace(t, ns)
+	}
+
+	inst := &dexv1.DexInstallation{
+		ObjectMeta: metav1.ObjectMeta{Name: "dex", Namespace: nsInst},
+		Spec: dexv1.DexInstallationSpec{
+			Issuer:            "https://dex.e2e-cns.example.com",
+			ConfigSecretName:  "dex-config",
+			EnvSecretName:     "dex-env",
+			AllowedNamespaces: []string{"*"}, // static clients only
+			Storage:           dexv1.DexStorageSpec{Type: dexv1.StorageKubernetes},
+		},
+	}
+	if err := e2eClient.Create(context.Background(), inst); err != nil {
+		t.Fatalf("create installation: %v", err)
+	}
+	t.Cleanup(func() { _ = e2eClient.Delete(context.Background(), inst) })
+
+	newConn := func(ns, name, issuer string) *dexv1.DexOIDCConnector {
+		e2eCreateSecret(t, ns, name, map[string][]byte{
+			"client-id":     []byte(name + "-id"),
+			"client-secret": []byte(name + "-secret"),
+		})
+		conn := &dexv1.DexOIDCConnector{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+			Spec: dexv1.DexOIDCConnectorSpec{
+				InstallationRef: dexv1.InstallationRef{Name: "dex", Namespace: nsInst},
+				DisplayName:     name,
+				Issuer:          issuer,
+				ClientIDRef:     dexv1.SecretKeyRef{Name: name, Key: "client-id"},
+				ClientSecretRef: dexv1.SecretKeyRef{Name: name, Key: "client-secret"},
+			},
+		}
+		if err := e2eClient.Create(context.Background(), conn); err != nil {
+			t.Fatalf("create connector %s/%s: %v", ns, name, err)
+		}
+		t.Cleanup(func() { _ = e2eClient.Delete(context.Background(), conn) })
+		return conn
+	}
+	newConn(nsInst, "own", "https://own.e2e-cns.example.com")
+	foreign := newConn(nsTenant, "foreign", "https://foreign.e2e-cns.example.com")
+
+	// Control: the own-namespace connector must be rendered, otherwise the
+	// negative assertion below would pass on an empty config.
+	e2eEventually(t, func() bool {
+		s := e2eGetSecret(nsInst, "dex-config")
+		return s != nil && strings.Contains(string(s.Data["config.yaml"]), "own.e2e-cns.example.com")
+	}, "own-namespace connector should be in config.yaml")
+
+	e2eEventually(t, func() bool {
+		var updated dexv1.DexOIDCConnector
+		if err := e2eClient.Get(context.Background(), client.ObjectKeyFromObject(foreign), &updated); err != nil {
+			return false
+		}
+		cond := e2eFindCondition(updated.Status.Conditions, dexv1.ConditionTypeReady)
+		return cond != nil && cond.Status == metav1.ConditionFalse &&
+			strings.Contains(cond.Message, "allowedConnectorNamespaces (omitted")
+	}, "foreign connector should be Ready=False with the omitted hint")
+
+	if s := e2eGetSecret(nsInst, "dex-config"); s != nil &&
+		strings.Contains(string(s.Data["config.yaml"]), "foreign.e2e-cns.example.com") {
+		t.Error("connector from a foreign namespace was rendered with allowedConnectorNamespaces omitted")
 	}
 }
 

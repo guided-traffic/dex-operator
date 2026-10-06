@@ -29,6 +29,12 @@ import (
 // IsNamespaceAllowed exposes [isNamespaceAllowed] for white-box testing.
 var IsNamespaceAllowed = isNamespaceAllowed
 
+// ConnectorNamespaces exposes [connectorNamespaces] for white-box testing.
+var ConnectorNamespaces = connectorNamespaces
+
+// CheckChildNamespace exposes [checkChildNamespace] for white-box testing.
+var CheckChildNamespace = checkChildNamespace
+
 // RolloutEnabled exposes [rolloutEnabled] for white-box testing.
 var RolloutEnabled = rolloutEnabled
 
@@ -65,4 +71,21 @@ func SecretWatchPredicate() predicate.Predicate {
 // for white-box testing of the deterministic ordering guarantee.
 func FilterStaticClients(items []dexv1.DexStaticClient, allowed []string) []dexv1.DexStaticClient {
 	return filterItems[dexv1.DexStaticClient, *dexv1.DexStaticClient](items, allowed)
+}
+
+// FilterOIDCConnectors exposes [filterItems] instantiated for
+// DexOIDCConnector for white-box testing of the connector allowlist path.
+func FilterOIDCConnectors(items []dexv1.DexOIDCConnector, allowed []string) []dexv1.DexOIDCConnector {
+	return filterItems[dexv1.DexOIDCConnector, *dexv1.DexOIDCConnector](items, allowed)
+}
+
+// MapInstallationToChildren exposes [GenericChildReconciler.mapInstallationToChildren]
+// for white-box testing. Usage: r.MapInstallationToChildren(ctx, installation).
+func (r *GenericChildReconciler[T, U]) MapInstallationToChildren(ctx context.Context, obj client.Object) ([]ctrl.Request, error) {
+	var zero U
+	listGVK, err := listGVKFor(T(&zero), r.Scheme)
+	if err != nil {
+		return nil, err
+	}
+	return r.mapInstallationToChildren(listGVK)(ctx, obj), nil
 }

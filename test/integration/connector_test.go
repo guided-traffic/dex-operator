@@ -158,7 +158,9 @@ func TestIntegration_GitHubConnector(t *testing.T) {
 }
 
 // TestIntegration_ConnectorForbiddenNamespace verifies that a connector placed
-// in a namespace that is not in AllowedNamespaces gets Ready=False status.
+// in a namespace that the installation does not admit for connectors gets
+// Ready=False status. allowedConnectorNamespaces is omitted, so only the
+// installation's own namespace is admitted.
 func TestIntegration_ConnectorForbiddenNamespace(t *testing.T) {
 	nsInst := "it-conn-inst"
 	nsForbidden := "it-conn-forbidden"
@@ -187,8 +189,9 @@ func TestIntegration_ConnectorForbiddenNamespace(t *testing.T) {
 			return false
 		}
 		cond := findCondition(updated.Status.Conditions, dexv1.ConditionTypeReady)
-		return cond != nil && cond.Status == metav1.ConditionFalse
-	}, "connector in forbidden namespace should have Ready=False")
+		return cond != nil && cond.Status == metav1.ConditionFalse &&
+			strings.Contains(cond.Message, "allowedConnectorNamespaces")
+	}, "connector in forbidden namespace should have Ready=False naming allowedConnectorNamespaces")
 }
 
 // TestIntegration_ConnectorDeleteTriggersReconcile verifies that deleting a

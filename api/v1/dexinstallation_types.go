@@ -63,11 +63,23 @@ type DexInstallationSpec struct {
 	// +kubebuilder:validation:Required
 	EnvSecretName string `json:"envSecretName"`
 
-	// AllowedNamespaces is a list of namespaces from which Connectors and
-	// StaticClients can reference this installation.
-	// Use ["*"] to allow all namespaces.
+	// AllowedNamespaces is a list of namespaces from which DexStaticClients
+	// can reference this installation. Use ["*"] to allow all namespaces.
+	// An empty or omitted list denies all. Connectors are governed by
+	// AllowedConnectorNamespaces.
 	// +optional
 	AllowedNamespaces []string `json:"allowedNamespaces,omitempty"`
+
+	// AllowedConnectorNamespaces is a list of namespaces from which
+	// connectors can reference this installation. When omitted, only the
+	// installation's own namespace is allowed. When set, the list is
+	// exhaustive: the installation's own namespace is allowed only if it is
+	// listed. Use ["*"] to allow all namespaces.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:XValidation:rule="!self.exists(n, n == '*') || self.size() == 1",message="\"*\" must be the only entry"
+	AllowedConnectorNamespaces []string `json:"allowedConnectorNamespaces,omitempty"`
 
 	// RolloutRestart configures an optional automated rollout restart of the
 	// Dex Deployment when the config changes.

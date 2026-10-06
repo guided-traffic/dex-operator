@@ -8,39 +8,53 @@ How the dex-operator handles credentials, isolates tenants, and what its trust m
 |---|---|
 | **dex-operator** | High privilege: cluster-wide read of all 18 CRDs, read/write of Secrets, patch of Deployments. Compromise of the operator ≈ compromise of the SSO configuration. |
 | **Dex namespace** (e.g. `dex`) | Sink for all rendered material. Anyone who can read Secrets here can read the full config **and every client secret**. |
-| **App namespaces** | Semi-trusted tenants. They may contribute connectors/clients *only if* allowlisted, and they expose credentials to the operator only by referencing their own Secrets. |
+| **App namespaces** | Semi-trusted tenants. They may contribute static clients *only if* listed in `allowedNamespaces`, and connectors *only if* listed in `allowedConnectorNamespaces` (by default no tenant namespace is). They expose credentials to the operator only by referencing their own Secrets. |
 | **Kubernetes API server** | Trusted enforcement point: RBAC, CEL validation, etcd storage. |
 
 ```
 app namespace (tenant)                dex namespace
-┌───────────────────────┐            ┌─────────────────────────────┐
-│ DexStaticClient       │            │ DexInstallation             │
-│ Dex*Connector         │──ref──┐    │  allowedNamespaces ✓ gate   │
-│ Secret (credentials)  │       │    │                             │
-└───────────────────────┘       ▼    │ config Secret (config.yaml) │
-                          dex-operator ──► env Secret (env vars)    │
-                                     │        │ envFrom            │
-                                     │        ▼                    │
-                                     │ Dex Deployment              │
-                                     └─────────────────────────────┘
+┌───────────────────────┐            ┌─────────────────────────────────────┐
+│ DexStaticClient       │            │ DexInstallation                     │
+│ Dex*Connector         │──ref──┐    │  allowedNamespaces          ✓ gate  │
+│ Secret (credentials)  │       │    │    (static clients)                 │
+└───────────────────────┘       │    │  allowedConnectorNamespaces ✓ gate  │
+                                │    │    (connectors; default: dex only)  │
+                                ▼    │ Dex*Connector (default home)        │
+                          dex-operator ──► config Secret (config.yaml)     │
+                                     │    └─► env Secret (env vars)        │
+                                     │         │ envFrom                   │
+                                     │         ▼                           │
+                                     │ Dex Deployment                      │
+                                     └─────────────────────────────────────┘
 ```
 
-## Namespace Isolation (`allowedNamespaces`)
+## Namespace Isolation (`allowedNamespaces`, `allowedConnectorNamespaces`)
 
-The central multi-tenancy control. Each `DexInstallation` declares which namespaces may contribute connectors and static clients:
+The central multi-tenancy control. Each `DexInstallation` carries two allowlists, one per child category, because the two categories carry different trust:
 
-- **empty / omitted → deny all** (fail-closed default)
-- `"*"` → every namespace
-- anything else → literal namespace names
+| Field | Governs | Omitted / empty | `"*"` | Other entries |
+|---|---|---|---|---|
+| `allowedNamespaces` | `DexStaticClient` | deny all (fail-closed; the own namespace is not implied) | every namespace | literal namespace names |
+| `allowedConnectorNamespaces` | all 16 connector kinds | only the installation's own namespace | every namespace (must be the only entry) | literal names; exhaustive, so list the own namespace too if connectors live there |
 
-It is enforced twice, independently:
+`allowedConnectorNamespaces: []` is rejected at admission (`MinItems=1`, [api/v1/dexinstallation_types.go](api/v1/dexinstallation_types.go)). With `omitempty`, any Go client that writes the object back would drop `[]` and silently turn "deny all" into "own namespace"; the schema makes that third state unrepresentable instead.
 
-1. **At build time** — `collectConnectors` / `collectStaticClients` filter every listed child through the allowlist before the config is rendered ([internal/controller/collect.go](internal/controller/collect.go), `filterItems` → `isNamespaceAllowed`). A non-allowlisted resource can never influence the rendered config, regardless of what its own status claims.
-2. **At child reconciliation** — the generic child reconciler marks resources from forbidden namespaces with a `Ready=False` condition and a clear reason ([internal/controller/child_reconciler.go](internal/controller/child_reconciler.go)), giving tenants feedback instead of silent exclusion.
+**Why connectors get their own, restrictive list.** A static client registers one relying party. A connector adds an identity source, and every client of the installation accepts the identities it produces: dex has no per-client connector restriction (`storage.Client` has no such field, dex v2.44.0). For any connector whose upstream the tenant runs or picks (OIDC, OAuth2, SAML, LDAP, Keystone, AtlassianCrowd, Gitea, OpenShift, self-hosted GitLab), the upstream returns whatever `email`, `email_verified` and `groups` the tenant wants; dex encodes the connector ID only into `sub`, so clients that authorize by email or groups accept the forged identity. Admitting a namespace to `allowedConnectorNamespaces` therefore means trusting it with identity issuance for the whole installation. The default keeps connectors in the installation's own namespace, which already holds the config and env Secrets and is the most trusted namespace of the installation.
 
-**What the allowlist defends against:** a tenant in an arbitrary namespace registering an OAuth2 client (or an identity-providing connector!) with your company SSO. A rogue client with an attacker-controlled redirect URI would receive authorization codes for real users; a rogue connector could mint identities. With the allowlist, only namespaces you explicitly trust can do either.
+The allowlists are enforced twice, independently:
 
-**What it does not defend against:** principals who already have `create` rights on Dex CRDs *inside* an allowed namespace. That boundary is Kubernetes RBAC — treat `dexstaticclients`/`dex*connectors` create/update as privileged verbs and grant them accordingly.
+1. **At build time** — `collectStaticClients` filters through `allowedNamespaces`, `collectConnectors` through the effective connector list (`connectorNamespaces`), both via `filterItems` → `isNamespaceAllowed` ([internal/controller/collect.go](internal/controller/collect.go), [namespace.go](internal/controller/namespace.go)). A non-allowlisted resource can never influence the rendered config, regardless of what its own status claims.
+2. **At child reconciliation** — the generic child reconciler marks resources from forbidden namespaces with a `Ready=False` condition that names the governing field; for a connector with `allowedConnectorNamespaces` omitted it adds `(omitted: only "<ns>" is allowed)` ([internal/controller/child_reconciler.go](internal/controller/child_reconciler.go)). The child reconcilers also watch `DexInstallation`, so the condition follows allowlist edits instead of staying stale until the child's own next event.
+
+Both fields take exact names only. Label selectors would need cluster-wide `get/list/watch` on `namespaces` and move the admission decision to whoever can label a namespace; name patterns would move it to whoever can create a matching namespace. Namespace names are immutable, so the decision stays with whoever can write the `DexInstallation`. No lookup of `Namespace` objects is needed, and the operator has no permission on them.
+
+**What the allowlists defend against:** a tenant in an arbitrary namespace registering an OAuth2 client or an identity-providing connector with your company SSO. A rogue client with an attacker-controlled redirect URI would receive authorization codes for real users; a rogue connector could mint identities. With the allowlists, only namespaces you explicitly trust can do either, and connector trust is a separate, explicit decision.
+
+**What they do not defend against:**
+
+- Principals who already have `create` rights on Dex CRDs *inside* an admitted namespace. That boundary is Kubernetes RBAC — treat `dexstaticclients`/`dex*connectors` create/update as privileged verbs and grant them accordingly.
+- **Name squatting.** A listed name that does not exist yet admits whoever creates that namespace first. In clusters where tenants can create namespaces (e.g. Capsule tenant owners), list only names that exist.
+- **Revocation latency without a restart.** Removing a namespace drops its children on the next render; with `rolloutRestart.enabled: false`, Dex keeps serving the old config until it restarts.
 
 ## Secret Flow
 
@@ -69,6 +83,7 @@ One deliberate exception: the LDAP root CA is embedded base64-inline (`rootCADat
 There is no webhook (no cert management, no availability coupling). Everything is enforced by the API server itself:
 
 - **CEL rules** on `DexStaticClient` guarantee that a client is either confidential (`secretRef`, `redirectURIs` required) or public (`public: true`, inline `clientID`) — never an ambiguous mix. Invalid objects are rejected at `kubectl apply`. See the truth table in the [README](README.md#dexstaticclient).
+- **`DexInstallation.spec.allowedConnectorNamespaces`** is a set (`MinItems=1`, no duplicates) and a CEL rule requires `"*"` to be the only entry, so a list can never look restrictive while admitting everything.
 - **Enums and formats** on security-relevant fields (storage types, SSL modes, log levels, URI formats) reduce the injection surface into the rendered YAML.
 
 Validation that needs cross-object knowledge (Secret existence, env-key collisions) happens at build time and surfaces via status conditions and events rather than admission errors.
@@ -116,11 +131,13 @@ Consequences to be aware of:
 ## Residual Risks & Hardening Checklist
 
 - [ ] **Protect the dex namespace.** Everything sensitive converges there. Restrict Secret read via RBAC; consider etcd encryption at rest — the env Secret aggregates all client secrets.
-- [ ] **Treat CRD verbs as privileged.** `create`/`update` on `dexstaticclients` and connectors in an allowed namespace equals the power to register SSO clients. Scope RBAC per namespace/team.
-- [ ] **Prefer explicit `allowedNamespaces`.** `"*"` shifts the entire tenancy boundary onto CRD RBAC.
+- [ ] **Treat CRD verbs as privileged.** `create`/`update` on `dexstaticclients` in an admitted namespace equals the power to register SSO clients; on `dex*connectors` in an admitted namespace, the power to issue identities for every client. Scope RBAC per namespace/team.
+- [ ] **Prefer explicit `allowedNamespaces`.** `"*"` shifts the static-client tenancy boundary onto CRD RBAC.
+- [ ] **Keep `allowedConnectorNamespaces` omitted unless a tenant must run its own IdP.** The default admits only the installation's namespace. Each extra entry trusts that namespace with identity issuance for the whole installation (see [Namespace Isolation](#namespace-isolation-allowednamespaces-allowedconnectornamespaces)); `"*"` makes every namespace an identity source.
 - [ ] **Audit `insecure*` flags.** Every connector option prefixed `insecure` (skip TLS verify, skip signature validation, skip email-verified, `insecureNoSSL`, `insecureCA`) removes a verification step and belongs in dev environments only. They are greppable in cluster: `kubectl get dex<type>connectors -A -o yaml | grep -n insecure`.
 - [ ] **Scope upstream restrictions.** Connectors without `orgs`/`groups`/`hostedDomains`/`teams`/`tenant` filters accept *any* account of that provider. Filter at the connector, not only in the app.
-- [ ] **AuthProxy connector:** only deploy behind a proxy that is the exclusive network path to Dex and strips inbound identity headers — otherwise identity forgery is trivial.
+- [ ] **AuthProxy connector:** only deploy behind a proxy that is the exclusive network path to Dex, authenticates `/callback/<connector-id>` and overwrites the identity headers — otherwise anyone who reaches Dex logs in as any user with any groups. Dex takes user, email, user ID and groups straight from request headers and returns `EmailVerified: true`. It strips `X-Remote-*` only on the plain `/callback` route; the connector's own `/callback/<connector-id>` route strips nothing, and custom header names (`userHeader`, `groupHeader`, …) are never stripped (dex v2.44.0, `server/server.go`, `connector/authproxy/authproxy.go`). Unlike other connector kinds, an honest mistake by the connector author is enough for an outsider; keep it in the installation's namespace.
+- [ ] **Password DB and the gRPC API:** a `DexLocalConnector` renders no connector entry; it only sets `enablePasswordDB: true`, which turns on email/password login (connector ID `local`) for every client of the installation. Whoever can write password entries then controls logins: dex storage (with `kubernetes` storage, the `passwords.dex.coreos.com` objects in the dex namespace) and the gRPC API. Dex requires client certificates on gRPC only when `grpc.tlsClientCA` is set; without it, anyone who reaches the gRPC port can call `CreatePassword` (dex v2.44.0, `cmd/dex/serve.go`).
 - [ ] **Mount file-based material.** `MountedSecrets` are not auto-mounted yet; a forgotten mount surfaces as a Dex startup/connector error, not a reconcile error.
 - [ ] **Least-privilege upstream accounts.** LDAP bind DN, Keystone admin, Google service account: read-only, minimally scoped.
 
