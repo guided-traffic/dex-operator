@@ -17,44 +17,96 @@ limitations under the License.
 package builder
 
 import (
+	"cmp"
 	"context"
+	"errors"
 	"fmt"
+	"slices"
+
+	"k8s.io/apimachinery/pkg/types"
 
 	dexv1 "github.com/guided-traffic/dex-operator/api/v1"
 )
 
-// buildStaticClients converts each DexStaticClient into a Dex StaticClient
-// config entry.  For clients with a secretRef the client-id is resolved from
-// the referenced Secret and embedded directly, while the client-secret is
-// stored in envs and referenced via the secretEnv field (bare env var name, no
-// $-prefix).  Secretless public clients carry their id inline and contribute
-// nothing to envs.
-func buildStaticClients(
-	ctx context.Context,
-	clients []dexv1.DexStaticClient,
-	sr SecretResolver,
-	envs map[string][]byte,
-) ([]StaticClient, error) {
-	usedEnvKeys := make(map[string]string, len(clients)) // envKey → resource name
-	result := make([]StaticClient, 0, len(clients))
+// clientUnits returns one render unit per static client in input order.
+// Each unit claims its client ID: spec.clientID for a secretless client, the
+// client-id from the referenced Secret for a confidential one.  When the
+// Secret cannot be resolved, the client claims status.clientID, the ID last
+// resolved for it, so a gap in its Secret frees nothing.
+func clientUnits(ctx context.Context, clients []dexv1.DexStaticClient, sr SecretResolver) []*renderUnit {
+	units := make([]*renderUnit, 0, len(clients))
 	for i := range clients {
-		sc, err := buildOneStaticClient(ctx, &clients[i], sr, envs, usedEnvKeys)
-		if err != nil {
-			return nil, fmt.Errorf("static client %q: %w", clients[i].Name, err)
+		c := &clients[i]
+		u := &renderUnit{
+			kind:      kindStaticClient,
+			namespace: c.Namespace,
+			name:      c.Name,
+			created:   c.CreationTimestamp,
 		}
-		result = append(result, sc)
+		u.id, u.claimErr = resolveClientID(ctx, c, sr)
+		u.resolved = u.claimErr == nil
+		if !u.resolved {
+			u.id = c.Status.ClientID
+		}
+		u.build = func(ctx context.Context, env *childEnv) (unitResult, error) {
+			sc, err := buildOneStaticClient(ctx, c, u.id, sr, env)
+			return unitResult{client: sc}, err
+		}
+		units = append(units, u)
 	}
-	return result, nil
+	return units
 }
 
+// resolveClientID returns the client's ID from its spec or its Secret.
+func resolveClientID(ctx context.Context, c *dexv1.DexStaticClient, sr SecretResolver) (string, error) {
+	// Secretless public client: the id is set inline.  CRD-level CEL
+	// validation guarantees that clientID is set whenever secretRef is
+	// absent.
+	if c.Spec.SecretRef == nil {
+		if c.Spec.ClientID == "" {
+			return "", errors.New("clientID is empty")
+		}
+		return c.Spec.ClientID, nil
+	}
+
+	clientID, err := resolveSecret(ctx, c.Namespace, dexv1.SecretKeyRef{
+		Name: c.Spec.SecretRef.Name,
+		Key:  secretRefKey(c.Spec.SecretRef.ClientIDKey, "client-id"),
+	}, sr)
+	if err != nil {
+		return "", fmt.Errorf("client-id: %w", err)
+	}
+	if clientID == "" {
+		return "", fmt.Errorf("client-id: key %q in secret %s/%s is empty",
+			secretRefKey(c.Spec.SecretRef.ClientIDKey, "client-id"), c.Namespace, c.Spec.SecretRef.Name)
+	}
+	return clientID, nil
+}
+
+// secretRefKey returns key, or def when key is empty.  The defaults are also
+// set by kubebuilder defaults on the CRD.
+func secretRefKey(key, def string) string {
+	if key == "" {
+		return def
+	}
+	return key
+}
+
+// buildOneStaticClient converts one DexStaticClient with the resolved
+// clientID into a Dex StaticClient config entry.  For clients with a
+// secretRef the client-secret is stored in env and referenced via the
+// secretEnv field (bare env var name, no $-prefix).  Secretless public
+// clients contribute nothing to env.  TrustedPeers are copied unfiltered;
+// [filterTrustedPeers] narrows them once every client's ID is known.
 func buildOneStaticClient(
 	ctx context.Context,
 	c *dexv1.DexStaticClient,
+	clientID string,
 	sr SecretResolver,
-	envs map[string][]byte,
-	usedEnvKeys map[string]string,
+	env *childEnv,
 ) (StaticClient, error) {
 	sc := StaticClient{
+		ID:           clientID,
 		Name:         c.Spec.DisplayName,
 		RedirectURIs: c.Spec.RedirectURIs,
 		Public:       c.Spec.Public,
@@ -63,74 +115,92 @@ func buildOneStaticClient(
 		sc.TrustedPeers = c.Spec.TrustedPeers
 	}
 
-	// Secretless public client: the id is set inline, no Secret is read and
-	// no env var is emitted.  CRD-level CEL validation guarantees that
-	// clientID is set whenever secretRef is absent.
 	if c.Spec.SecretRef == nil {
-		sc.ID = c.Spec.ClientID
 		return sc, nil
 	}
-
-	clientID, csEnvKey, err := resolveClientCredentials(ctx, c, sr, envs, usedEnvKeys)
-	if err != nil {
-		return StaticClient{}, err
-	}
-	sc.ID = clientID
-	sc.SecretEnv = csEnvKey
-
-	return sc, nil
-}
-
-// resolveClientCredentials reads the client-id and client-secret from the
-// referenced Secret.  The client-id is returned for inline embedding, the
-// client-secret is written to envs under the returned env var key.
-func resolveClientCredentials(
-	ctx context.Context,
-	c *dexv1.DexStaticClient,
-	sr SecretResolver,
-	envs map[string][]byte,
-	usedEnvKeys map[string]string,
-) (clientID, csEnvKey string, err error) {
-	// Default key names defined by kubebuilder defaults on the CRD.
-	clientIDKey := c.Spec.SecretRef.ClientIDKey
-	if clientIDKey == "" {
-		clientIDKey = "client-id"
-	}
-	clientSecretKey := c.Spec.SecretRef.ClientSecretKey
-	if clientSecretKey == "" {
-		clientSecretKey = "client-secret"
-	}
-
-	// Resolve the actual client-id value (embedded inline in the config).
-	clientID, err = resolveSecret(ctx, c.Namespace, dexv1.SecretKeyRef{
-		Name: c.Spec.SecretRef.Name,
-		Key:  clientIDKey,
-	}, sr)
-	if err != nil {
-		return "", "", fmt.Errorf("client-id: %w", err)
-	}
-
-	// Build the env var key and check for collisions.
-	csEnvKey = clientEnvKey(c.Name, "CLIENT_SECRET")
-	resourceFQN := c.Namespace + "/" + c.Name
-	if prev, ok := usedEnvKeys[csEnvKey]; ok {
-		return "", "", fmt.Errorf(
-			"env var name collision: %q is already used by %q (current: %q)",
-			csEnvKey, prev, resourceFQN,
-		)
-	}
-	usedEnvKeys[csEnvKey] = resourceFQN
 
 	// Resolve the client-secret into the env Secret; reference it via
 	// the secretEnv field (bare env var name, no $-prefix).
 	csVal, err := resolveSecret(ctx, c.Namespace, dexv1.SecretKeyRef{
 		Name: c.Spec.SecretRef.Name,
-		Key:  clientSecretKey,
+		Key:  secretRefKey(c.Spec.SecretRef.ClientSecretKey, "client-secret"),
 	}, sr)
 	if err != nil {
-		return "", "", fmt.Errorf("client-secret: %w", err)
+		return StaticClient{}, fmt.Errorf("client-secret: %w", err)
 	}
-	envs[csEnvKey] = []byte(csVal)
+	sc.SecretEnv, err = env.set(c.Name, "CLIENT_SECRET", csVal)
+	if err != nil {
+		return StaticClient{}, err
+	}
 
-	return clientID, csEnvKey, nil
+	return sc, nil
+}
+
+// filterTrustedPeers narrows the trustedPeers of every rendered client to
+// the IDs held by a static client in that client's own namespace, and
+// returns the entries it left out, sorted by namespace, name and peer ID.
+//
+// An ID is held by the client the contest rule leaves it to (see [contest]),
+// whether that client renders or failed to build, so a gap in a peer's
+// Secret does not rewrite the trusting client's entry.  Holders and the
+// filter come from the same render.
+func filterTrustedPeers(units []*renderUnit) []dexv1.DroppedTrustedPeer {
+	holders := make(map[string]string, len(units)) // client ID → namespace
+	for _, u := range units {
+		if u.wins {
+			holders[u.id] = u.namespace
+		}
+	}
+
+	var dropped []dexv1.DroppedTrustedPeer
+	for _, u := range units {
+		if !u.rendered || len(u.result.client.TrustedPeers) == 0 {
+			continue
+		}
+		var kept []string
+		for _, peer := range u.result.client.TrustedPeers {
+			if ns, held := holders[peer]; held && ns == u.namespace {
+				kept = append(kept, peer)
+				continue
+			}
+			dropped = append(dropped, dexv1.DroppedTrustedPeer{Namespace: u.namespace, Name: u.name, PeerID: peer})
+		}
+		u.result.client.TrustedPeers = kept
+	}
+
+	slices.SortFunc(dropped, func(a, b dexv1.DroppedTrustedPeer) int {
+		return cmp.Or(
+			cmp.Compare(a.Namespace, b.Namespace),
+			cmp.Compare(a.Name, b.Name),
+			cmp.Compare(a.PeerID, b.PeerID),
+		)
+	})
+	return slices.Compact(dropped)
+}
+
+// renderedClients returns the config entries of the rendered clients and
+// their source objects, both in input order.
+func renderedClients(units []*renderUnit, src []dexv1.DexStaticClient) ([]StaticClient, []dexv1.DexStaticClient) {
+	entries := make([]StaticClient, 0, len(units))
+	var objs []dexv1.DexStaticClient
+	for i, u := range units {
+		if !u.rendered {
+			continue
+		}
+		entries = append(entries, u.result.client)
+		objs = append(objs, src[i])
+	}
+	return entries, objs
+}
+
+// resolvedClientIDs returns the ID resolved for every client whose ID came
+// from its spec or its Secret, rendered or not.
+func resolvedClientIDs(units []*renderUnit) map[types.NamespacedName]string {
+	ids := make(map[types.NamespacedName]string, len(units))
+	for _, u := range units {
+		if u.resolved {
+			ids[types.NamespacedName{Namespace: u.namespace, Name: u.name}] = u.id
+		}
+	}
+	return ids
 }

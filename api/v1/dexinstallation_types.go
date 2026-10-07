@@ -462,6 +462,68 @@ type DexInstallationStatus struct {
 	// StaticClientCount is the number of static clients currently reconciled.
 	// +optional
 	StaticClientCount int `json:"staticClientCount,omitempty"`
+
+	// RejectedChildren lists connectors and static clients that reference
+	// this installation and pass its namespace allowlists, but are not part
+	// of the rendered config. Sorted by kind, namespace, name.
+	// +optional
+	// +listType=atomic
+	RejectedChildren []RejectedChild `json:"rejectedChildren,omitempty"`
+
+	// DroppedTrustedPeers lists trustedPeers entries left out of the
+	// rendered config because no static client in the trusting client's
+	// namespace holds the peer ID. Sorted by namespace, name, peer ID.
+	// +optional
+	// +listType=atomic
+	DroppedTrustedPeers []DroppedTrustedPeer `json:"droppedTrustedPeers,omitempty"`
+}
+
+// Reasons of a [RejectedChild].
+const (
+	// RejectionReasonDuplicateID marks a child whose ID is claimed by more
+	// than one child of the installation, or reserved by Dex itself.
+	RejectionReasonDuplicateID = "DuplicateID"
+	// RejectionReasonBuildFailed marks a child whose config entry could not
+	// be built, e.g. because a referenced Secret or key is missing.
+	RejectionReasonBuildFailed = "BuildFailed"
+)
+
+// RejectedChild identifies one child left out of the rendered config.
+type RejectedChild struct {
+	// Kind is the child's kind, e.g. DexStaticClient or DexOIDCConnector.
+	Kind string `json:"kind"`
+
+	// Namespace of the child.
+	Namespace string `json:"namespace"`
+
+	// Name of the child.
+	Name string `json:"name"`
+
+	// ID is the client ID or connector ID the child claimed. Empty when it
+	// could not be determined: a confidential client whose Secret is
+	// missing and whose status carries no clientID yet.
+	// +optional
+	ID string `json:"id,omitempty"`
+
+	// Reason is DuplicateID or BuildFailed.
+	Reason string `json:"reason"`
+
+	// Message is copied into the child's Ready condition and therefore
+	// never names another namespace.
+	Message string `json:"message"`
+}
+
+// DroppedTrustedPeer names one trustedPeers entry left out of the
+// rendered config.
+type DroppedTrustedPeer struct {
+	// Namespace of the trusting DexStaticClient.
+	Namespace string `json:"namespace"`
+
+	// Name of the trusting DexStaticClient.
+	Name string `json:"name"`
+
+	// PeerID is the trustedPeers entry that was left out.
+	PeerID string `json:"peerID"`
 }
 
 // +kubebuilder:object:root=true

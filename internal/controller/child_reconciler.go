@@ -20,10 +20,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -31,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -45,9 +50,11 @@ const configRequeueInterval = 5 * time.Minute
 // configError signals a user-caused configuration problem that will not
 // resolve by simple retrying. The controller logs these at WARN level
 // and requeues after a long interval instead of using the default
-// exponential back-off.
+// exponential back-off. A non-empty reason replaces the default reason of
+// the Ready condition.
 type configError struct {
-	msg string
+	reason string
+	msg    string
 }
 
 func (e *configError) Error() string { return e.msg }
@@ -55,6 +62,12 @@ func (e *configError) Error() string { return e.msg }
 // newConfigError creates a configError with the given message.
 func newConfigError(msg string) *configError {
 	return &configError{msg: msg}
+}
+
+// newRejectionError creates a configError for a child the installation left
+// out of its rendered config, carrying the installation's reason.
+func newRejectionError(rc dexv1.RejectedChild) *configError {
+	return &configError{reason: rc.Reason, msg: rc.Message}
 }
 
 // isConfigError returns true when err (or any wrapped cause) is a configError.
@@ -89,10 +102,13 @@ func (r *GenericChildReconciler[T, U]) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	reconcileErr := r.reconcileChild(ctx, ptr)
+	installation, reconcileErr := r.reconcileChild(ctx, ptr)
 
 	setReadyCondition(ptr.GetCommonStatus(), ptr.GetGeneration(), reconcileErr)
 	ptr.GetCommonStatus().ObservedGeneration = ptr.GetGeneration()
+	if sc, isClient := any(ptr).(*dexv1.DexStaticClient); isClient {
+		setTrustedPeersDroppedCondition(sc, installation)
+	}
 
 	if statusErr := r.Status().Update(ctx, ptr); statusErr != nil {
 		if !apierrors.IsConflict(statusErr) {
@@ -118,11 +134,13 @@ func (r *GenericChildReconciler[T, U]) Reconcile(ctx context.Context, req ctrl.R
 // SetupWithManager registers this reconciler as a controller for type T.
 //
 // Besides its own kind it watches DexInstallation, so that a change to the
-// installation's allowlists re-evaluates the Ready condition of every child
-// referencing it. Only generation changes (spec edits), creates and deletes
-// pass; the installation's frequent status updates would otherwise fan out to
-// all its children. The DexInstallation controller must be set up first: it
-// registers the InstallationRefIndexField index used by the mapping.
+// installation's allowlists, or to the children it left out of its rendered
+// config, re-evaluates the conditions of every child referencing it. Only
+// generation changes (spec edits), changes of status.rejectedChildren or
+// status.droppedTrustedPeers, creates and deletes pass; the installation's
+// other status updates would otherwise fan out to all its children. The
+// DexInstallation controller must be set up first: it registers the
+// InstallationRefIndexField index used by the mapping.
 func (r *GenericChildReconciler[T, U]) SetupWithManager(mgr ctrl.Manager) error {
 	var zero U
 	listGVK, err := listGVKFor(T(&zero), r.Scheme)
@@ -134,15 +152,34 @@ func (r *GenericChildReconciler[T, U]) SetupWithManager(mgr ctrl.Manager) error 
 		Watches(
 			&dexv1.DexInstallation{},
 			handler.EnqueueRequestsFromMapFunc(r.mapInstallationToChildren(listGVK)),
-			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+			builder.WithPredicates(predicate.Or(predicate.GenerationChangedPredicate{}, childReportChangedPredicate())),
 		).
 		Complete(r)
 }
 
+// childReportChangedPredicate passes an installation update that changes
+// status.rejectedChildren or status.droppedTrustedPeers, the two status
+// fields a child's conditions are derived from.
+func childReportChangedPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldInst, okOld := e.ObjectOld.(*dexv1.DexInstallation)
+			newInst, okNew := e.ObjectNew.(*dexv1.DexInstallation)
+			if !okOld || !okNew {
+				return false
+			}
+			return !equality.Semantic.DeepEqual(oldInst.Status.RejectedChildren, newInst.Status.RejectedChildren) ||
+				!equality.Semantic.DeepEqual(oldInst.Status.DroppedTrustedPeers, newInst.Status.DroppedTrustedPeers)
+		},
+	}
+}
+
 // reconcileChild validates that the resource's namespace is allowed by its
 // referenced DexInstallation (see [checkChildNamespace] for which allowlist
-// applies to which kind).
-func (r *GenericChildReconciler[T, U]) reconcileChild(ctx context.Context, obj T) error {
+// applies to which kind), and that the installation did not leave it out of
+// its rendered config (status.rejectedChildren). It returns the installation
+// when it could be read.
+func (r *GenericChildReconciler[T, U]) reconcileChild(ctx context.Context, obj T) (*dexv1.DexInstallation, error) {
 	ref := obj.GetInstallationRef()
 
 	var installation dexv1.DexInstallation
@@ -151,13 +188,66 @@ func (r *GenericChildReconciler[T, U]) reconcileChild(ctx context.Context, obj T
 		Name:      ref.Name,
 	}, &installation); err != nil {
 		if apierrors.IsNotFound(err) {
-			return newConfigError(fmt.Sprintf(
+			return nil, newConfigError(fmt.Sprintf(
 				"referenced DexInstallation %s/%s not found", ref.Namespace, ref.Name))
 		}
-		return fmt.Errorf("fetching DexInstallation %s/%s: %w", ref.Namespace, ref.Name, err)
+		return nil, fmt.Errorf("fetching DexInstallation %s/%s: %w", ref.Namespace, ref.Name, err)
 	}
 
-	return checkChildNamespace(obj, &installation)
+	if err := checkChildNamespace(obj, &installation); err != nil {
+		return &installation, err
+	}
+
+	gvk, err := apiutil.GVKForObject(obj, r.Scheme)
+	if err != nil {
+		return &installation, fmt.Errorf("resolving kind of %T: %w", obj, err)
+	}
+	if rc := findRejectedChild(&installation, gvk.Kind, obj.GetNamespace(), obj.GetName()); rc != nil {
+		return &installation, newRejectionError(*rc)
+	}
+	return &installation, nil
+}
+
+// findRejectedChild returns the installation's report on the child
+// kind/namespace/name, or nil when the child is not rejected.
+func findRejectedChild(installation *dexv1.DexInstallation, kind, namespace, name string) *dexv1.RejectedChild {
+	for i, rc := range installation.Status.RejectedChildren {
+		if rc.Kind == kind && rc.Namespace == namespace && rc.Name == name {
+			return &installation.Status.RejectedChildren[i]
+		}
+	}
+	return nil
+}
+
+// setTrustedPeersDroppedCondition sets the TrustedPeersDropped condition of
+// a static client from the installation's status.droppedTrustedPeers: True
+// with the client's own dropped peer IDs, False when it has none. The
+// message never names the namespace of a peer's holder. installation may be
+// nil when it could not be read.
+func setTrustedPeersDroppedCondition(sc *dexv1.DexStaticClient, installation *dexv1.DexInstallation) {
+	var peers []string
+	if installation != nil {
+		for _, d := range installation.Status.DroppedTrustedPeers {
+			if d.Namespace == sc.Namespace && d.Name == sc.Name {
+				peers = append(peers, strconv.Quote(d.PeerID))
+			}
+		}
+	}
+
+	cond := metav1.Condition{
+		Type:               dexv1.ConditionTypeTrustedPeersDropped,
+		ObservedGeneration: sc.Generation,
+		Status:             metav1.ConditionFalse,
+		Reason:             "NoneDropped",
+	}
+	if len(peers) > 0 {
+		cond.Status = metav1.ConditionTrue
+		cond.Reason = dexv1.ConditionTypeTrustedPeersDropped
+		cond.Message = fmt.Sprintf(
+			"trustedPeers %s are left out of the rendered config: no DexStaticClient in namespace %q holds these IDs",
+			strings.Join(peers, ", "), sc.Namespace)
+	}
+	setOrReplaceCondition(&sc.Status.CommonStatus, cond)
 }
 
 // mapInstallationToChildren returns a handler.MapFunc that maps a

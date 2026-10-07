@@ -2,8 +2,11 @@
 
 ## Status
 
-Accepted. Date: 2026-10-07, recording the decision built in 2.3.0 (2026-10-06). The single list
-`allowedNamespaces` it split had governed both categories since the first release.
+Accepted, amended 2026-10-07 (D6: the installation watch also passes changes of
+`status.rejectedChildren` and `status.droppedTrustedPeers`; what the allowlists do not decide is
+decided by ADR 0008 and ADR 0009). Date: 2026-10-07, recording the decision built in 2.3.0
+(2026-10-06). The single list `allowedNamespaces` it split had governed both categories since the
+first release.
 
 **Implemented.**
 
@@ -51,9 +54,14 @@ list never reaches the render whatever its own status says
 connector with the field omitted adds `(omitted: only "<ns>" is allowed)`.
 
 **D6 — Child status follows the installation.** Every child reconciler watches `DexInstallation`
-(generation changes, creates and deletes only) and enqueues the children of its kind that
-reference it (`mapInstallationToChildren`, through `InstallationRefIndexField`). The
-DexInstallation controller registers that index, so it is set up first
+— generation changes, changes of `status.rejectedChildren` or `status.droppedTrustedPeers`
+(`childReportChangedPredicate`), creates and deletes — and enqueues the children of its kind that
+reference it (`mapInstallationToChildren`, through `InstallationRefIndexField`). A child's
+conditions are derived from those two status fields
+([ADR 0008](0008-an-id-renders-for-one-child-only-and-a-failing-child-is-left-out-instead-of-failing-the-render.md) D7,
+[ADR 0009](0009-a-client-trusts-only-peers-held-in-its-own-namespace.md) D4); the installation's
+other status updates do not fan out. *Superseded 2026-10-07:* generation changes, creates and
+deletes only. The DexInstallation controller registers the index, so it is set up first
 ([cmd/main.go](../../cmd/main.go)).
 
 **D7 — No per-kind connector rule and no separate category for `cors: true`.** With the
@@ -95,7 +103,10 @@ derived from, which `allowedNamespaces` already gates
 - Removing a namespace drops its children on the next render; with `rolloutRestart.enabled:
   false`, Dex serves the old config until it restarts.
 - Within an admitted namespace the boundary is Kubernetes RBAC on the Dex CRDs; the allowlists
-  decide which namespaces may register, not what a registration inside them may claim.
+  decide which namespaces may register, not which IDs a registration may claim or whom a client
+  may trust. Which child holds an ID is
+  [ADR 0008](0008-an-id-renders-for-one-child-only-and-a-failing-child-is-left-out-instead-of-failing-the-render.md),
+  which peers a client may trust [ADR 0009](0009-a-client-trusts-only-peers-held-in-its-own-namespace.md).
 
 ## References
 

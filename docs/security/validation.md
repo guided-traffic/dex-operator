@@ -40,16 +40,24 @@ enforces CEL ([test/integration/staticclient_test.go](../../test/integration/sta
 ## Found only at build time
 
 Validation that needs knowledge of other objects cannot be expressed in CEL: whether a referenced
-Secret and key exist, whether two static clients' env var names collide after sanitizing. It
-happens at build time and surfaces through the `DexInstallation`'s `Ready` condition rather than
-as an admission error ([internal/controller/status.go](../../internal/controller/status.go)
-`setReadyCondition`). The operator records no Kubernetes events — it has no event recorder, and
-`events` appear only in the leader-election Role.
+Secret and key exist, whether a client or connector ID is claimed by more than one child, whether
+an env var key is taken. It happens at build time. A child that fails it is left out of the
+config and reported — on the installation in `status.rejectedChildren` with the condition
+`ChildrenRejected`, on the child as `Ready=False` with reason `DuplicateID` or `BuildFailed` — while
+every other child renders
+([ADR 0008](../adr/0008-an-id-renders-for-one-child-only-and-a-failing-child-is-left-out-instead-of-failing-the-render.md)).
+A colliding env var key is not an error at all: the later child gets a fallback key
+([secret-flow.md](secret-flow.md)). Only a failing storage credential and the connector guard fail
+the render; they surface through the `DexInstallation`'s `Ready` condition
+([internal/controller/status.go](../../internal/controller/status.go) `setReadyCondition`). The
+operator records no Kubernetes events — it has no event recorder, and `events` appear only in the
+leader-election Role.
 
 ## What this does not cover
 
 - **Cross-object rules at admission.** Nothing that depends on another object — a Secret, another
   client, another connector — is checked when a resource is applied; there is no webhook to do it.
+  A duplicate ID is accepted by the API server and only rejected by the render.
 - **Semantic checks of upstream settings.** A syntactically valid issuer URL, bind DN or scope list
   is accepted whether or not the upstream answers to it; Dex finds out when it starts or when a
   user logs in.

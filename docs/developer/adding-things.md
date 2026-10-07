@@ -13,13 +13,15 @@ is for. Every list ends with `make lint`, `make cyclo` and the test tiers of
    `GetReferencedSecretNames` must list every Secret the spec can reference (it drives rotation
    reactivity, [architecture.md](architecture.md#the-childobject-interface)).
 3. **Builder** — the slice in `ConnectorSet` ([builder.go](../../internal/builder/builder.go)), a
-   `build<Type>Connector`, wired into `buildAllConnectors` or the OAuth loop in
-   [connectors_oauth.go](../../internal/builder/connectors_oauth.go). Credentials go to env
-   through `resolveEnvSecret` with a `connectorEnvKey` name, file material through `mountCertFile`
-   or `mountSecretAsFile` ([builder.md](builder.md#conventions-encoded-here)).
+   `build<Type>Connector` with the `connectorBuildFunc` signature, and one `addConnectorUnits`
+   line with the kind name in `connectorUnits` ([connectors.go](../../internal/builder/connectors.go))
+   or `oauthConnectorUnits` ([connectors_oauth.go](../../internal/builder/connectors_oauth.go)) —
+   its position there is its render position. Credentials go to env through `resolveEnvSecret`
+   with `connectorEnvBase(<type>, id)` and a field, file material through `mountCertFile` or
+   `mountSecretAsFile` ([builder.md](builder.md#conventions-encoded-here)). The kind then takes
+   part in the ID contest and in skip-and-report without further code.
 4. **Collection** — a collector method and the `ConnectorSet` field in
-   [collect.go](../../internal/controller/collect.go), and `countConnectors` in
-   [dexinstallation_controller.go](../../internal/controller/dexinstallation_controller.go).
+   [collect.go](../../internal/controller/collect.go).
 5. **Wiring** — the type lists in `registerIndexers` and `childWatchSources`
    ([dexinstallation_controller.go](../../internal/controller/dexinstallation_controller.go)),
    `lookupChildSecretRefs` ([secret_watch.go](../../internal/controller/secret_watch.go)), the

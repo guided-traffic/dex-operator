@@ -56,7 +56,12 @@ type DexStaticClientSpec struct {
 	// +optional
 	RedirectURIs []string `json:"redirectURIs,omitempty"`
 
-	// TrustedPeers lists other client IDs whose ID tokens this client trusts.
+	// TrustedPeers lists the client IDs that may obtain ID tokens with this
+	// client's ID as audience (cross-client trust). Only entries whose ID is
+	// held by a DexStaticClient in this client's own namespace are rendered;
+	// every other entry is left out of the config and reported in
+	// status.droppedTrustedPeers of the installation and in this client's
+	// TrustedPeersDropped condition.
 	// +optional
 	TrustedPeers []string `json:"trustedPeers,omitempty"`
 
@@ -97,6 +102,14 @@ type StaticClientSecretRef struct {
 // DexStaticClientStatus defines the observed state of DexStaticClient.
 type DexStaticClientStatus struct {
 	CommonStatus `json:",inline"`
+
+	// ClientID is the client ID the operator last resolved for this client,
+	// from spec.clientID or from the Secret, whether or not the client
+	// rendered. While the Secret cannot be resolved, the client keeps
+	// claiming this ID, so a gap in the Secret does not free the ID for
+	// another namespace.
+	// +optional
+	ClientID string `json:"clientID,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -104,6 +117,7 @@ type DexStaticClientStatus struct {
 // +kubebuilder:resource:scope=Namespaced,shortName=dexsc
 // +kubebuilder:printcolumn:name="Installation",type=string,JSONPath=`.spec.installationRef.name`
 // +kubebuilder:printcolumn:name="Display Name",type=string,JSONPath=`.spec.displayName`
+// +kubebuilder:printcolumn:name="Client ID",type=string,JSONPath=`.status.clientID`
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 

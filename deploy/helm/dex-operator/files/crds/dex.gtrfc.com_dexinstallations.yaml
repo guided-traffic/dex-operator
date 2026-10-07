@@ -634,11 +634,80 @@ spec:
                 description: ConnectorCount is the number of connectors currently
                   reconciled.
                 type: integer
+              droppedTrustedPeers:
+                description: |-
+                  DroppedTrustedPeers lists trustedPeers entries left out of the
+                  rendered config because no static client in the trusting client's
+                  namespace holds the peer ID. Sorted by namespace, name, peer ID.
+                items:
+                  description: |-
+                    DroppedTrustedPeer names one trustedPeers entry left out of the
+                    rendered config.
+                  properties:
+                    name:
+                      description: Name of the trusting DexStaticClient.
+                      type: string
+                    namespace:
+                      description: Namespace of the trusting DexStaticClient.
+                      type: string
+                    peerID:
+                      description: PeerID is the trustedPeers entry that was left
+                        out.
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  - peerID
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
               observedGeneration:
                 description: ObservedGeneration is the generation last processed by
                   the controller.
                 format: int64
                 type: integer
+              rejectedChildren:
+                description: |-
+                  RejectedChildren lists connectors and static clients that reference
+                  this installation and pass its namespace allowlists, but are not part
+                  of the rendered config. Sorted by kind, namespace, name.
+                items:
+                  description: RejectedChild identifies one child left out of the
+                    rendered config.
+                  properties:
+                    id:
+                      description: |-
+                        ID is the client ID or connector ID the child claimed. Empty when it
+                        could not be determined: a confidential client whose Secret is
+                        missing and whose status carries no clientID yet.
+                      type: string
+                    kind:
+                      description: Kind is the child's kind, e.g. DexStaticClient
+                        or DexOIDCConnector.
+                      type: string
+                    message:
+                      description: |-
+                        Message is copied into the child's Ready condition and therefore
+                        never names another namespace.
+                      type: string
+                    name:
+                      description: Name of the child.
+                      type: string
+                    namespace:
+                      description: Namespace of the child.
+                      type: string
+                    reason:
+                      description: Reason is DuplicateID or BuildFailed.
+                      type: string
+                  required:
+                  - kind
+                  - message
+                  - name
+                  - namespace
+                  - reason
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
               staticClientCount:
                 description: StaticClientCount is the number of static clients currently
                   reconciled.
