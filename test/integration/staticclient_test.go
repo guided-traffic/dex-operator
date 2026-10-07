@@ -550,7 +550,7 @@ func TestIntegration_StaticClientCORSUnionAndRemoval(t *testing.T) {
 }
 
 // TestIntegration_StaticClientCORSForbiddenNamespace verifies the security
-// claim in SECURITY_ARCHITECTURE.md: allowedNamespaces bounds origin
+// claim in docs/security/clients.md: allowedNamespaces bounds origin
 // registration exactly like it bounds client registration.  The allowed client
 // acts as the control — without it the negative assertion could pass simply
 // because nothing was ever rendered.

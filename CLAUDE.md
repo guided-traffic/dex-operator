@@ -1,11 +1,36 @@
 # Dex Operator
 
-Ein Kubernetes Operator (Go 1.26, controller-runtime) der die Konfiguration von Dex dynamisch aus Custom Resources zusammenbaut.
+Ein Kubernetes Operator (Go 1.27, controller-runtime) der die Konfiguration von Dex dynamisch aus Custom Resources zusammenbaut.
 
-## Dokumentation
-- `README.md` — User-Doku: Key Features, Naming-Konventionen, TL;DR-Quickstart, vollständige CR-Referenz (alle 18 CRDs maximal befüllt, Connectors in `<details>`-Blöcken). Bei API-Änderungen die betroffenen Beispiele mitpflegen.
-- `DEVELOPER.md` — Entwickler-Doku: Repo-Layout, Paket-Verantwortlichkeiten, Reconcile-Flow, Checkliste "neuen Connector-Typ hinzufügen", Test-/Release-Prozess.
-- `SECURITY_ARCHITECTURE.md` — Sicherheitsarchitektur: Trust-Boundaries, Secret-Flow (env-Indirektion, MountedSecrets), Namespace-Isolation, RBAC-Footprint, Hardening-Checkliste.
+## Documentation — where a statement goes
+
+A statement has exactly one home
+([ADR 0001](docs/adr/0001-documentation-has-five-homes-and-tickets-are-work-lists-that-get-archived.md)):
+
+| Kind | Home |
+|---|---|
+| A decision — what the operator does and why, what was rejected | an [ADR](docs/adr/README.md) |
+| How the code works and how to contribute | [docs/developer/](docs/developer/README.md) — there is no `DEVELOPER.md` |
+| What somebody running the operator needs | [docs/operations/](docs/operations/README.md) |
+| The threat model and the gap each mechanism leaves | [docs/security/](docs/security/README.md), one page per perspective, each ending with `## What this does not cover` — there is no `SECURITY_ARCHITECTURE.md`; reporting is [SECURITY.md](SECURITY.md) |
+| Naming conventions, fast start, the fully populated reference of all 18 CRDs | [README.md](README.md) and nowhere else — keep the examples in step with every API change |
+| Work still outstanding, open decisions | a [ticket](docs/tickets/README.md), archived when the work lands |
+
+**Read the page for a subsystem before you change it, and update it in the same change.**
+
+- **Tickets** are `docs/tickets/NNN-<slug>.md` with the frontmatter of the rules page, current
+  state only, closed by extracting the durable parts (decision → ADR, operator consequence →
+  README or operations, security → security page, contributor knowledge → developer page) and
+  moving the file to `docs/tickets/archive/`. A finding goes into an existing ticket first; a
+  number is never reused.
+- **An open security finding is embargoed** — the repository is public. `security: live|boundary`
+  unfixed → the file is `docs/tickets/local_NNN-<slug>.md` (gitignored), and no tracked file,
+  commit or PR carries its details or its file name.
+- **Nothing outside `docs/tickets/` cites a ticket** — not by number, label, path or file name.
+  Cite the ADR.
+- **ADRs** follow [docs/adr/README.md](docs/adr/README.md); a changed decision amends its record in
+  place.
+
 Dex wird weiterhin über das offizielle Dex Helm Chart installiert. Der Operator erzeugt zwei Secrets im Namespace der Dex-Installation:
 1. **Config-Secret** — Enthält die vollständige Dex-Konfiguration als YAML (Issuer, Storage, Web, gRPC, Logger, Expiry, Connectors, Static Clients)
 2. **Env-Secret** — Enthält alle Client-Secrets als Env-Variablen (z.B. `GRAFANA_CLIENT_SECRET`), wird per `envFrom` an den Dex-Container gehängt und in der Config per `secretEnv` referenziert
@@ -59,7 +84,7 @@ Env-var naming convention:
 - Storage credential: `STORAGE_<FIELD>` (e.g. `STORAGE_POSTGRES_PASSWORD`)
 
 CA cert data (LDAP `rootCAData`) is base64-encoded and inlined in config.
-File-path-only certs (SAML `ca`, client TLS, service accounts) are added to `MountedSecrets`; the controller picks these up in Phase 4.
+File-path-only certs (SAML `ca`, client TLS, service accounts) are added to `MountedSecrets`; no code outside the builder reads them yet — operators mount the files in their Dex Helm values (`docs/operations/runtime.md`).
 
 ### Static clients: confidential vs. public (secretless)
 
@@ -91,9 +116,10 @@ Decisions (asked and settled, do not silently revert):
 - `spec.web == nil` + derived origins creates the `web:` block (listener
   addresses come from the dex chart's CLI flags, applied after config load).
 
-Consumer follow-ups (k8s-flux-base chart bump, k8s-flux-mgmt `cors: true`) are
-documented in `local_web_origins.md` §6 and deliberately **not** done here —
-they need a released operator first.
+The decisions are recorded in
+[ADR 0005](docs/adr/0005-a-static-client-opts-in-to-derive-its-cors-origins-from-its-own-https-redirect-uris.md).
+Changes in consuming repositories (chart bumps, `cors: true` on their clients) are
+deliberately **not** done here.
 
 There is no admission webhook in this repo. All conditional validation is done with
 **CEL markers** (`+kubebuilder:validation:XValidation`) on the spec struct:

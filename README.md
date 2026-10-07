@@ -96,8 +96,11 @@ Two `DexStaticClient` resources whose names sanitize to the same env var (e.g. `
 
 | Document | Content |
 |---|---|
-| [DEVELOPER.md](DEVELOPER.md) | Repository layout, packages and their responsibilities, reconciliation flow, how to add a connector type, test & release workflow |
-| [SECURITY_ARCHITECTURE.md](SECURITY_ARCHITECTURE.md) | In-depth security architecture: trust boundaries, secret flow, namespace isolation, RBAC footprint, residual risks |
+| [docs/operations/](docs/operations/README.md) | Running the operator: when a change reaches Dex, why a rotated secret needs a Dex restart, mounting file material, reading the conditions, upgrading |
+| [docs/security/](docs/security/README.md) | The security architecture, one page per perspective: trust boundaries, tenancy, connectors, clients, secret flow, validation, privilege footprint, rotation — each with the gaps it leaves open |
+| [SECURITY.md](SECURITY.md) | How to report a vulnerability, supported versions |
+| [docs/developer/](docs/developer/README.md) | Repository layout, packages and their responsibilities, architecture and reconcile flow, how to add a connector type, build, test and release |
+| [docs/adr/](docs/adr/README.md) | The design decisions and what was rejected |
 | [Custom Resource Reference](#-custom-resource-reference) | Every CRD with a fully populated example |
 | [Dex documentation](https://dexidp.io/docs/) | Upstream semantics of all connector and OAuth2 options |
 
@@ -425,7 +428,7 @@ spec:
   # Security: tenancy control for STATIC CLIENTS only. Only DexStaticClients
   # from these namespaces are included. Empty/omitted = deny all (the
   # installation's own namespace is not implied). "*" = allow every
-  # namespace — combine with RBAC on the CRDs (see SECURITY_ARCHITECTURE.md).
+  # namespace — combine with RBAC on the CRDs (see docs/security/tenancy.md).
   allowedNamespaces:
     - monitoring                      # example
     - team-a                          # example
@@ -1180,7 +1183,7 @@ make lint           # go vet + gofmt + golangci-lint
 make test           # unit + envtest suites
 ```
 
-See [DEVELOPER.md](DEVELOPER.md) for the full repository walkthrough, test matrix (unit / integration / e2e) and release process.
+See [docs/developer/](docs/developer/README.md) for the full repository walkthrough, test matrix (unit / integration / e2e) and release process.
 
 ## License
 

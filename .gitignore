@@ -36,3 +36,8 @@ go.work.sum
 node_modules/
 main
 tmp/
+
+# Embargoed tickets: a live|boundary security finding stays untracked while
+# local_-prefixed, independent of anyone's global excludes file (docs/adr/0001).
+# The ** covers archive/ as well.
+docs/tickets/**/local_*
