@@ -42,11 +42,12 @@ flowchart LR
 - 🔌 **16 connector types** — LDAP, OIDC, SAML, GitHub, GitLab, Google, Microsoft, and more, each with its own strongly-typed CRD
 - 🔐 **No secrets in Custom Resources** — credentials stay in Kubernetes Secrets and are referenced by name/key; client secrets are injected into Dex as environment variables, never written in plaintext into the rendered config
 - 🏢 **Multi-tenant by design** — apps register their own OAuth2 clients from their own namespaces; two per-installation allowlists decide who may contribute clients and who may contribute connectors (connectors default to the installation's own namespace)
+- 🪪 **One owner per ID** — a client or connector ID renders for exactly one resource, and a client trusts only peers in its own namespace; contested IDs, failing resources and dropped peers are left out and reported instead of breaking the render for everybody
 - 🚦 **Public (PKCE) and confidential clients** — secretless static clients for CLIs/SPAs, validated at admission time via CEL rules (no webhook needed)
 - 🔁 **Live reconfiguration** — changes to any CR or referenced Secret re-render the config; optional automatic rollout restart of the Dex Deployment
 - 👀 **Secret rotation aware** — the operator watches referenced Secrets and reacts to credential rotations automatically
 - 🧮 **Deterministic output** — stable ordering and semantic YAML comparison prevent restart loops and config churn
-- 📊 **Operational visibility** — `Ready` conditions, connector/client counts, and `kubectl get` print columns on every resource
+- 📊 **Operational visibility** — `Ready` conditions, connector/client counts, the list of rejected resources on the installation, and `kubectl get` print columns on every resource
 - 📦 **Helm installation** — including a pre-upgrade hook job that keeps CRDs up to date
 
 ## 📛 Naming Conventions
@@ -75,8 +76,9 @@ Credentials are materialized in the env Secret under deterministic names. Names 
 | Keystone admin password | `KEYSTONE_<ID>_PASSWORD` | `KEYSTONE_OPENSTACK_PASSWORD` |
 | Storage password | `STORAGE_<BACKEND>_PASSWORD` | `STORAGE_POSTGRES_PASSWORD` |
 | Static client secret | `<RESOURCE_NAME>_CLIENT_SECRET` | `GRAFANA_CLIENT_SECRET` (from a `DexStaticClient` named `grafana`) |
+| Fallback when the name above is taken | `<BASE>_<HASH>_<FIELD>` — `<HASH>` is 8 hex characters of SHA-256 over `<kind>/<namespace>/<name>` | `GRAFANA_1A2B3C4D_CLIENT_SECRET` (example — a second `grafana` in another namespace) |
 
-Two `DexStaticClient` resources whose names sanitize to the same env var (e.g. `my-app` and `my.app`) are rejected with a collision error at build time.
+No two resources ever share an env var. Names are assigned in one order across storage, connectors and static clients — storage first, then resources in the installation's namespace, then the oldest — and a resource whose name is already taken (`grafana` in two namespaces, `my-app` and `my.app`, a client named `oidc-okta` next to the OIDC connector `okta`) gets the fallback name and works normally. When the holder of the plain name goes away, it moves back to the plain name (one config change). A name that collides with nothing is the plain name.
 
 ### Secret keys and file paths
 
@@ -289,6 +291,28 @@ to the `DexInstallation`'s own namespace. Check before upgrading:
   and whose `allowedNamespaces` admitted it, render byte-identical config: no
   config diff, no Dex rollout.
 
+**Upgrading to the release that makes client and connector IDs unique per
+installation:** check before upgrading:
+
+- **Cross-namespace trusted peers stop working.** A `trustedPeers` entry
+  naming a client in another namespace — or a client that does not exist — is
+  dropped: the config changes, Dex rolls out, and cross-client token requests
+  from that peer fail until both clients live in one namespace (move the
+  client's `secretRef` Secret with it). Find them after the upgrade in
+  `status.droppedTrustedPeers` of the installation.
+- **Existing duplicate IDs change the config.** After the upgrade a duplicate
+  between the installation's namespace and another one renders only the
+  installation's entry; a duplicate between two other namespaces, or within one namespace,
+  renders **neither**, and both relying parties fail until one resource is
+  removed or renamed. The same holds for connector IDs, across connector kinds.
+- **An installation frozen by a failing resource renders again**, carrying
+  every change that was held back; the failing resource is left out and Dex
+  rolls out without it.
+- **The first render patches `status.clientID`** on every static client, one
+  status write each.
+- No duplicate IDs, no failing resource and every `trustedPeers` entry held in
+  its own namespace: byte-identical config, no Dex rollout.
+
 </details>
 
 ## 📖 Custom Resource Reference
@@ -296,10 +320,12 @@ to the `DexInstallation`'s own namespace. Check before upgrading:
 Shared concepts for all resources:
 
 - **`installationRef`** — every connector and static client references exactly one `DexInstallation` by `name` + `namespace`. Static clients must come from a namespace in that installation's `allowedNamespaces`, connectors from a namespace in its `allowedConnectorNamespaces` (default: the installation's own namespace). Resources from other namespaces are ignored and marked with `Ready=False`; the condition follows allowlist changes on the installation.
+- **IDs are unique per installation** — client IDs and connector IDs (separate spaces, connectors across all 16 kinds) render for one resource only. An ID renders when exactly one admitted resource claims it, or when exactly one of its claimants is in the installation's namespace; otherwise it renders for **nobody**. Every claimant that does not render is `Ready=False` with reason `DuplicateID`, and the installation lists it in `status.rejectedChildren` with its claimed `id` — find all claimants of an ID there. Nothing outside the installation's namespace wins a contest, so keep security-relevant clients there. While a `DexLocalConnector` exists, the connector ID `local` belongs to Dex's password database. A confidential client whose Secret is missing keeps claiming the ID in its `status.clientID`. Moving a client to another namespace needs no particular order: either the old and the new object contest each other until the old one is deleted, or the ID is free until the new one exists — one render goes without the client either way. Details: [docs/security/tenancy.md](docs/security/tenancy.md#one-child-per-id).
+- **A failing resource is left out, not fatal** — a connector or client whose Secret or key is missing is skipped with `Ready=False`, reason `BuildFailed`, and listed in `status.rejectedChildren`; everything else renders. Only an unresolvable storage credential stops the render, and so does the connector guard: when connectors exist but none of them renders and no `DexLocalConnector` does, the last written config stays (Dex does not start without a connector) and the installation is `Ready=False`.
 - **`id`** (connectors) — the Dex connector ID; defaults to `metadata.name`.
 - **`displayName`** — the human-readable name shown on the Dex login/approval screen.
 - **`*Ref` fields** — `{name, key}` references to Kubernetes Secrets **in the same namespace** as the referencing resource.
-- **Status** — all resources report a `Ready` condition and `observedGeneration`.
+- **Status** — all resources report a `Ready` condition and `observedGeneration`; the installation's and a static client's additional status is in their sections below.
 
 The examples below are maximally populated. Fields are set to their **default** where one exists; otherwise a realistic **example** value is shown. Security-relevant fields carry a short note — absence of a note means the field has no direct security impact.
 
@@ -451,6 +477,51 @@ spec:
                                       # config is re-read immediately
 ```
 
+Status, written by the operator (example):
+
+```yaml
+status:
+  observedGeneration: 3
+  connectorCount: 2                   # rendered connectors, a DexLocalConnector included
+  staticClientCount: 5                # rendered static clients
+  # Resources that reference this installation and pass its allowlists, but
+  # are not in the rendered config. reason: DuplicateID | BuildFailed. The
+  # message is the one the resource shows in its own Ready condition.
+  # Security: lists namespaces, names and IDs of every tenant concerned —
+  # readable by whoever can read this installation.
+  rejectedChildren:
+    - kind: DexStaticClient
+      namespace: team-a
+      name: app
+      id: shared-app
+      reason: DuplicateID
+      message: client ID "shared-app" is claimed by more than one DexStaticClient of DexInstallation dex/main
+    - kind: DexStaticClient
+      namespace: team-b
+      name: app
+      id: shared-app
+      reason: DuplicateID
+      message: client ID "shared-app" is claimed by more than one DexStaticClient of DexInstallation dex/main
+  # trustedPeers entries left out because no static client in the trusting
+  # client's namespace holds the peer ID.
+  droppedTrustedPeers:
+    - namespace: monitoring
+      name: grafana
+      peerID: argocd
+  conditions:
+    - type: Ready                     # True: rendered and both Secrets written
+      status: "True"
+      reason: Reconciled
+    - type: ChildrenRejected          # True while rejectedChildren is non-empty
+      status: "True"
+      reason: ChildrenRejected
+      message: "rejected children: 2, see status.rejectedChildren"
+    - type: TrustedPeersDropped       # True while droppedTrustedPeers is non-empty
+      status: "True"
+      reason: TrustedPeersDropped
+      message: "dropped trustedPeers entries: 1, see status.droppedTrustedPeers"
+```
+
 ### DexStaticClient
 
 An OAuth2 client registered with Dex. Two modes exist, and the difference matters for security:
@@ -460,7 +531,7 @@ An OAuth2 client registered with Dex. Two modes exist, and the difference matter
 | Spec | `secretRef` → Secret with `client-id`/`client-secret` | `public: true` + inline `clientID` |
 | Client authentication | client secret at the token endpoint | none — PKCE (RFC 7636) binds the code to the initiator |
 | `redirectURIs` | **required** | optional — Dex falls back to loopback, OOB and device-flow URIs |
-| Env Secret entry | `<NAME>_CLIENT_SECRET` | none |
+| Env Secret entry | `<NAME>_CLIENT_SECRET` (or its fallback name) | none |
 | Typical use | server-side web apps (Grafana, ArgoCD, …) | CLIs, native apps, SPAs |
 
 **Why it matters:** a confidential client proves its identity with a secret, so only the real backend can redeem authorization codes — the redirect URI allowlist is a second line of defense. A public client cannot hold a secret (anything shipped to a browser or laptop is extractable); its protection rests entirely on PKCE plus redirect-URI control. That trade-off is acceptable for interactive tools, but never model a server-side app as public: you would silently drop the client-authentication layer. Dex supports secretless clients since v2.24.0.
@@ -496,12 +567,27 @@ spec:
   # enable authorization-code interception.
   redirectURIs:
     - https://grafana.example.com/login/generic_oauth
-  # Security: peers listed here may exchange their ID tokens for tokens of
-  # this client (cross-client trust). Only list clients you fully control.
+  # Security: the client IDs listed here may obtain ID tokens with THIS
+  # client's ID as audience (cross-client trust) — every resource server
+  # that accepts this audience accepts those tokens. Only IDs held by a
+  # DexStaticClient in this same namespace are rendered; any other entry is
+  # left out and reported (condition TrustedPeersDropped).
   trustedPeers:
-    - argocd                          # example
+    - grafana-cli                     # example — a client in namespace monitoring
   public: false                       # default
   cors: false                         # default — see "Browser clients" below
+status:                               # written by the operator
+  clientID: grafana                   # the ID last resolved for this client
+                                      # (print column "Client ID"); while the
+                                      # Secret is missing, the client keeps
+                                      # claiming it
+  conditions:
+    - type: Ready                     # False with reason DuplicateID or
+      status: "True"                  # BuildFailed when the installation
+      reason: Reconciled              # left this client out
+    - type: TrustedPeersDropped       # True with the dropped peer IDs
+      status: "False"
+      reason: NoneDropped
 ```
 
 Public client, fully populated:
@@ -549,6 +635,8 @@ staticClients:
 
 Additionally: confidential clients must set at least one entry in `redirectURIs`.
 
+**Trusted peers stay in the namespace.** A `trustedPeers` entry renders only when a `DexStaticClient` in the trusting client's own namespace holds that client ID — the one that renders, or the sole claimant whose Secret is missing. An entry naming a client in another namespace, a contested ID, or an ID nobody holds yet is left out of the config, listed in the installation's `status.droppedTrustedPeers` and shown on the trusting client as `TrustedPeersDropped=True`; it comes back as soon as a client of that namespace holds the ID. This holds in the installation's namespace too. To let two applications trust each other, put both clients into one namespace.
+
 **Browser clients (`cors: true`):** Dex gates its browser-facing endpoints (discovery, token, keys) behind a CORS allowlist. Server-side clients never hit it; an SPA that runs code+PKCE via XHR does. Setting `cors: true` registers the origins of this client's own **https** `redirectURIs` in the installation's `web.allowedOrigins`, so a browser client can self-register from its own namespace instead of requiring an edit on the `DexInstallation`:
 
 ```yaml
@@ -588,7 +676,7 @@ Rules:
 
 ### Connectors
 
-Sixteen connector CRDs cover Dex's upstream identity providers. All share `installationRef`, `id` (default: `metadata.name`) and `displayName`; client secrets always land in the env Secret as `<TYPE>_<ID>_CLIENT_SECRET`, while client IDs are embedded inline (they are not confidential).
+Sixteen connector CRDs cover Dex's upstream identity providers. All share `installationRef`, `id` (default: `metadata.name`, unique across all connector kinds of an installation — see `installationRef` above) and `displayName`; client secrets always land in the env Secret as `<TYPE>_<ID>_CLIENT_SECRET` (or its fallback name, see [naming conventions](#generated-environment-variables)), while client IDs are embedded inline (they are not confidential).
 
 | CRD | Dex `type` | Credential env vars | File mounts needed |
 |---|---|---|---|

@@ -16,6 +16,9 @@ Builder rendering, env naming, determinism, the namespace rules — no cluster.
 
 - [internal/builder/builder_test.go](../../internal/builder/builder_test.go) — the rendering of
   every kind. Helpers: `minimalInstallation(namespace)`, `mockResolver(secrets)`, `parseYAML`.
+- [internal/builder/contest_test.go](../../internal/builder/contest_test.go) — the claim rules: the
+  contest, `status.clientID` while a Secret is missing, skip-and-report, the connector guard, env
+  key priority and fallback keys, the trusted-peer filter, determinism with duplicates.
 - [internal/builder/builder_dexschema_test.go](../../internal/builder/builder_dexschema_test.go) —
   pins the rendered keys to Dex's config schema; `assertNoKeys` asserts a key is **absent**, the
   pattern for "this field must not be rendered".
@@ -27,8 +30,18 @@ Builder rendering, env naming, determinism, the namespace rules — no cluster.
 - [internal/controller/render_compat_test.go](../../internal/controller/render_compat_test.go) —
   an installation whose connectors live in its own namespace renders byte-identical config to the
   unfiltered render for several `allowedNamespaces` values: the upgrade promise of
-  `allowedConnectorNamespaces`. The pattern for any change that must not alter existing output —
-  an altered render is a config diff, and a Dex restart, in every installation on upgrade.
+  `allowedConnectorNamespaces`. `TestReconcile_RenderMatchesV230` renders the multi-tenant
+  fixture of [render_compat_fixture_test.go](../../internal/controller/render_compat_fixture_test.go)
+  and compares config and env Secret with
+  [testdata/render-compat-v2.3.0/](../../internal/controller/testdata/render-compat-v2.3.0/),
+  which v2.3.0's own reconciler produced from exactly those objects: the upgrade promise of the
+  claim rules. The pattern for any change that must not alter existing output — an altered render
+  is a config diff, and a Dex restart, in every installation on upgrade. A golden file is only
+  regenerated with the release it pins, never with the code under test.
+- [internal/controller/claims_test.go](../../internal/controller/claims_test.go) — the
+  installation's report (`rejectedChildren`, `droppedTrustedPeers`, both conditions),
+  `status.clientID`, the connector guard keeping the last config, the child conditions, the watch
+  predicate.
 - [internal/controller/dexinstallation_controller_test.go](../../internal/controller/dexinstallation_controller_test.go),
   [child_reconciler_test.go](../../internal/controller/child_reconciler_test.go),
   [helpers_test.go](../../internal/controller/helpers_test.go) — controller logic against a fake
@@ -50,6 +63,9 @@ the namespace allowlists, Secret generation, the CEL validation of `DexStaticCli
   and `allowedConnectorNamespaces`, including the child status following an allowlist edit
 - [staticclient_test.go](../../test/integration/staticclient_test.go) — confidential, public and
   invalid clients, derived CORS origins
+- [claims_test.go](../../test/integration/claims_test.go) — a contested client ID on both
+  claimants and the installation, cleared through the installation watch; `status.clientID`
+  holding an ID while its Secret is missing; a dropped trusted peer and its return
 
 envtest runs no RBAC: a missing verb in the chart's ClusterRole is not caught here.
 
@@ -59,7 +75,11 @@ The chart installed into a Kind cluster with [test/e2e/helm-values.yaml](../../t
 the operator running under the chart's real RBAC, the pre-install hook applying the CRDs. Tests in
 [dexinstallation_e2e_test.go](../../test/e2e/dexinstallation_e2e_test.go):
 `TestE2E_MinimalInstallation`, `TestE2E_OIDCConnector`, `TestE2E_StaticClient`,
-`TestE2E_NamespaceIsolation`, `TestE2E_ConnectorNamespaceDefault`, `TestE2E_ConnectorLifecycle`.
+`TestE2E_NamespaceIsolation`, `TestE2E_ConnectorNamespaceDefault`, `TestE2E_ConnectorLifecycle`;
+in [claims_e2e_test.go](../../test/e2e/claims_e2e_test.go):
+`TestE2E_TenantReusesPlatformClientID`, `TestE2E_TwoTenantsShareClientID`,
+`TestE2E_PlatformClientTrustsTenantHeldPeer`. The first also asserts the `status.clientID` patch,
+the one write that only the chart's ClusterRole can refuse.
 
 `make test-e2e-helm` runs `-run TestE2E_Migrate` with the tags `e2e,e2e_helm`, but no file in the
 tree carries the `e2e_helm` tag or defines `TestE2E_Migrate`: the target runs no test. There is no

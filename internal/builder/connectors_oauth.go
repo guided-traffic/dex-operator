@@ -23,188 +23,34 @@ import (
 	dexv1 "github.com/guided-traffic/dex-operator/api/v1"
 )
 
-// buildAllOAuthConnectors builds connector entries for all OAuth-style
-// connectors (GitHub, GitLab, Google, LinkedIn, Microsoft, OIDC, OAuth2,
-// OpenShift, AtlassianCrowd, Gitea, Bitbucket, Keystone).
-func buildAllOAuthConnectors(
-	ctx context.Context,
-	cs ConnectorSet,
-	sr SecretResolver,
-	envs map[string][]byte,
-) ([]ConnectorEntry, []MountedSecret, error) {
-	var entries []ConnectorEntry
-	var mounts []MountedSecret
-
-	e1, m1, err := buildSocialConnectors(ctx, cs, sr, envs)
-	if err != nil {
-		return nil, nil, err
-	}
-	entries = append(entries, e1...)
-	mounts = append(mounts, m1...)
-
-	e2, m2, err := buildIdentityConnectors(ctx, cs, sr, envs)
-	if err != nil {
-		return nil, nil, err
-	}
-	entries = append(entries, e2...)
-	mounts = append(mounts, m2...)
-
-	e3, m3, err := buildHostingConnectors(ctx, cs, sr, envs)
-	if err != nil {
-		return nil, nil, err
-	}
-	entries = append(entries, e3...)
-	mounts = append(mounts, m3...)
-
-	return entries, mounts, nil
-}
-
-// buildSocialConnectors handles GitHub, GitLab, Google, LinkedIn, Microsoft.
-func buildSocialConnectors(
-	ctx context.Context,
-	cs ConnectorSet,
-	sr SecretResolver,
-	envs map[string][]byte,
-) ([]ConnectorEntry, []MountedSecret, error) {
-	entries := make([]ConnectorEntry, 0, len(cs.GitHub)+len(cs.GitLab)+len(cs.Google)+len(cs.LinkedIn)+len(cs.Microsoft))
-	var mounts []MountedSecret
-
-	for i := range cs.GitHub {
-		e, m, err := buildGitHubConnector(ctx, &cs.GitHub[i], sr, envs)
-		if err != nil {
-			return nil, nil, fmt.Errorf("GitHub connector %q: %w", cs.GitHub[i].Name, err)
-		}
-		entries = append(entries, e)
-		mounts = append(mounts, m...)
-	}
-
-	for i := range cs.GitLab {
-		e, m, err := buildGitLabConnector(ctx, &cs.GitLab[i], sr, envs)
-		if err != nil {
-			return nil, nil, fmt.Errorf("GitLab connector %q: %w", cs.GitLab[i].Name, err)
-		}
-		entries = append(entries, e)
-		mounts = append(mounts, m...)
-	}
-
-	for i := range cs.Google {
-		e, m, err := buildGoogleConnector(ctx, &cs.Google[i], sr, envs)
-		if err != nil {
-			return nil, nil, fmt.Errorf("google connector %q: %w", cs.Google[i].Name, err)
-		}
-		entries = append(entries, e)
-		mounts = append(mounts, m...)
-	}
-
-	for i := range cs.LinkedIn {
-		e, m, err := buildLinkedInConnector(ctx, &cs.LinkedIn[i], sr, envs)
-		if err != nil {
-			return nil, nil, fmt.Errorf("LinkedIn connector %q: %w", cs.LinkedIn[i].Name, err)
-		}
-		entries = append(entries, e)
-		mounts = append(mounts, m...)
-	}
-
-	for i := range cs.Microsoft {
-		e, m, err := buildMicrosoftConnector(ctx, &cs.Microsoft[i], sr, envs)
-		if err != nil {
-			return nil, nil, fmt.Errorf("microsoft connector %q: %w", cs.Microsoft[i].Name, err)
-		}
-		entries = append(entries, e)
-		mounts = append(mounts, m...)
-	}
-
-	return entries, mounts, nil
-}
-
-// buildIdentityConnectors handles OIDC, OAuth2 (generic), OpenShift,
-// AtlassianCrowd, Keystone.
-func buildIdentityConnectors(
-	ctx context.Context,
-	cs ConnectorSet,
-	sr SecretResolver,
-	envs map[string][]byte,
-) ([]ConnectorEntry, []MountedSecret, error) {
-	entries := make([]ConnectorEntry, 0, len(cs.OIDC)+len(cs.OAuth2)+len(cs.OpenShift)+len(cs.AtlassianCrowd)+len(cs.Keystone))
-	var mounts []MountedSecret
-
-	for i := range cs.OIDC {
-		e, m, err := buildOIDCConnector(ctx, &cs.OIDC[i], sr, envs)
-		if err != nil {
-			return nil, nil, fmt.Errorf("OIDC connector %q: %w", cs.OIDC[i].Name, err)
-		}
-		entries = append(entries, e)
-		mounts = append(mounts, m...)
-	}
-
-	for i := range cs.OAuth2 {
-		e, m, err := buildOAuth2Connector(ctx, &cs.OAuth2[i], sr, envs)
-		if err != nil {
-			return nil, nil, fmt.Errorf("OAuth2 connector %q: %w", cs.OAuth2[i].Name, err)
-		}
-		entries = append(entries, e)
-		mounts = append(mounts, m...)
-	}
-
-	for i := range cs.OpenShift {
-		e, m, err := buildOpenShiftConnector(ctx, &cs.OpenShift[i], sr, envs)
-		if err != nil {
-			return nil, nil, fmt.Errorf("OpenShift connector %q: %w", cs.OpenShift[i].Name, err)
-		}
-		entries = append(entries, e)
-		mounts = append(mounts, m...)
-	}
-
-	for i := range cs.AtlassianCrowd {
-		e, m, err := buildAtlassianCrowdConnector(ctx, &cs.AtlassianCrowd[i], sr, envs)
-		if err != nil {
-			return nil, nil, fmt.Errorf("AtlassianCrowd connector %q: %w", cs.AtlassianCrowd[i].Name, err)
-		}
-		entries = append(entries, e)
-		mounts = append(mounts, m...)
-	}
-
-	for i := range cs.Keystone {
-		e, m, err := buildKeystoneConnector(ctx, &cs.Keystone[i], sr, envs)
-		if err != nil {
-			return nil, nil, fmt.Errorf("keystone connector %q: %w", cs.Keystone[i].Name, err)
-		}
-		entries = append(entries, e)
-		mounts = append(mounts, m...)
-	}
-
-	return entries, mounts, nil
-}
-
-// buildHostingConnectors handles Gitea and Bitbucket.
-func buildHostingConnectors(
-	ctx context.Context,
-	cs ConnectorSet,
-	sr SecretResolver,
-	envs map[string][]byte,
-) ([]ConnectorEntry, []MountedSecret, error) {
-	entries := make([]ConnectorEntry, 0, len(cs.Gitea)+len(cs.Bitbucket))
-	var mounts []MountedSecret
-
-	for i := range cs.Gitea {
-		e, m, err := buildGiteaConnector(ctx, &cs.Gitea[i], sr, envs)
-		if err != nil {
-			return nil, nil, fmt.Errorf("gitea connector %q: %w", cs.Gitea[i].Name, err)
-		}
-		entries = append(entries, e)
-		mounts = append(mounts, m...)
-	}
-
-	for i := range cs.Bitbucket {
-		e, m, err := buildBitbucketConnector(ctx, &cs.Bitbucket[i], sr, envs)
-		if err != nil {
-			return nil, nil, fmt.Errorf("bitbucket connector %q: %w", cs.Bitbucket[i].Name, err)
-		}
-		entries = append(entries, e)
-		mounts = append(mounts, m...)
-	}
-
-	return entries, mounts, nil
+// oauthConnectorUnits appends the render units of the OAuth-style connectors
+// to units, in render order: GitHub, GitLab, Google, LinkedIn, Microsoft,
+// OIDC, OAuth2, OpenShift, AtlassianCrowd, Keystone, Gitea, Bitbucket.
+func oauthConnectorUnits(units []*renderUnit, cs ConnectorSet, sr SecretResolver) []*renderUnit {
+	units = addConnectorUnits(units, "DexGitHubConnector", cs.GitHub,
+		func(c *dexv1.DexGitHubConnector) string { return c.Spec.ID }, buildGitHubConnector, sr)
+	units = addConnectorUnits(units, "DexGitLabConnector", cs.GitLab,
+		func(c *dexv1.DexGitLabConnector) string { return c.Spec.ID }, buildGitLabConnector, sr)
+	units = addConnectorUnits(units, "DexGoogleConnector", cs.Google,
+		func(c *dexv1.DexGoogleConnector) string { return c.Spec.ID }, buildGoogleConnector, sr)
+	units = addConnectorUnits(units, "DexLinkedInConnector", cs.LinkedIn,
+		func(c *dexv1.DexLinkedInConnector) string { return c.Spec.ID }, buildLinkedInConnector, sr)
+	units = addConnectorUnits(units, "DexMicrosoftConnector", cs.Microsoft,
+		func(c *dexv1.DexMicrosoftConnector) string { return c.Spec.ID }, buildMicrosoftConnector, sr)
+	units = addConnectorUnits(units, "DexOIDCConnector", cs.OIDC,
+		func(c *dexv1.DexOIDCConnector) string { return c.Spec.ID }, buildOIDCConnector, sr)
+	units = addConnectorUnits(units, "DexOAuth2Connector", cs.OAuth2,
+		func(c *dexv1.DexOAuth2Connector) string { return c.Spec.ID }, buildOAuth2Connector, sr)
+	units = addConnectorUnits(units, "DexOpenShiftConnector", cs.OpenShift,
+		func(c *dexv1.DexOpenShiftConnector) string { return c.Spec.ID }, buildOpenShiftConnector, sr)
+	units = addConnectorUnits(units, "DexAtlassianCrowdConnector", cs.AtlassianCrowd,
+		func(c *dexv1.DexAtlassianCrowdConnector) string { return c.Spec.ID }, buildAtlassianCrowdConnector, sr)
+	units = addConnectorUnits(units, "DexKeystoneConnector", cs.Keystone,
+		func(c *dexv1.DexKeystoneConnector) string { return c.Spec.ID }, buildKeystoneConnector, sr)
+	units = addConnectorUnits(units, "DexGiteaConnector", cs.Gitea,
+		func(c *dexv1.DexGiteaConnector) string { return c.Spec.ID }, buildGiteaConnector, sr)
+	return addConnectorUnits(units, "DexBitbucketConnector", cs.Bitbucket,
+		func(c *dexv1.DexBitbucketConnector) string { return c.Spec.ID }, buildBitbucketConnector, sr)
 }
 
 // ── shared OAuth helper ───────────────────────────────────────────────────────
@@ -216,15 +62,14 @@ func resolveOAuthCreds(
 	namespace, connType, id string,
 	clientIDRef, clientSecretRef dexv1.SecretKeyRef,
 	sr SecretResolver,
-	envs map[string][]byte,
+	env *childEnv,
 ) (clientID, clientSecretEnvRef string, err error) {
 	clientID, err = resolveSecret(ctx, namespace, clientIDRef, sr)
 	if err != nil {
 		return "", "", fmt.Errorf("clientID: %w", err)
 	}
 
-	csKey := connectorEnvKey(connType, id, "CLIENT_SECRET")
-	clientSecretEnvRef, err = resolveEnvSecret(ctx, namespace, clientSecretRef, csKey, sr, envs)
+	clientSecretEnvRef, err = resolveEnvSecret(ctx, namespace, clientSecretRef, connectorEnvBase(connType, id), "CLIENT_SECRET", sr, env)
 	if err != nil {
 		return "", "", fmt.Errorf("clientSecret: %w", err)
 	}
@@ -238,10 +83,10 @@ func buildGitHubConnector(
 	ctx context.Context,
 	c *dexv1.DexGitHubConnector,
 	sr SecretResolver,
-	envs map[string][]byte,
+	env *childEnv,
 ) (ConnectorEntry, []MountedSecret, error) {
 	id := connectorID(c.Name, c.Spec.ID)
-	clientID, csRef, err := resolveOAuthCreds(ctx, c.Namespace, "github", id, c.Spec.ClientIDRef, c.Spec.ClientSecretRef, sr, envs)
+	clientID, csRef, err := resolveOAuthCreds(ctx, c.Namespace, "github", id, c.Spec.ClientIDRef, c.Spec.ClientSecretRef, sr, env)
 	if err != nil {
 		return ConnectorEntry{}, nil, err
 	}
@@ -297,10 +142,10 @@ func buildGitLabConnector(
 	ctx context.Context,
 	c *dexv1.DexGitLabConnector,
 	sr SecretResolver,
-	envs map[string][]byte,
+	env *childEnv,
 ) (ConnectorEntry, []MountedSecret, error) {
 	id := connectorID(c.Name, c.Spec.ID)
-	clientID, csRef, err := resolveOAuthCreds(ctx, c.Namespace, "gitlab", id, c.Spec.ClientIDRef, c.Spec.ClientSecretRef, sr, envs)
+	clientID, csRef, err := resolveOAuthCreds(ctx, c.Namespace, "gitlab", id, c.Spec.ClientIDRef, c.Spec.ClientSecretRef, sr, env)
 	if err != nil {
 		return ConnectorEntry{}, nil, err
 	}
@@ -332,10 +177,10 @@ func buildGoogleConnector(
 	ctx context.Context,
 	c *dexv1.DexGoogleConnector,
 	sr SecretResolver,
-	envs map[string][]byte,
+	env *childEnv,
 ) (ConnectorEntry, []MountedSecret, error) {
 	id := connectorID(c.Name, c.Spec.ID)
-	clientID, csRef, err := resolveOAuthCreds(ctx, c.Namespace, "google", id, c.Spec.ClientIDRef, c.Spec.ClientSecretRef, sr, envs)
+	clientID, csRef, err := resolveOAuthCreds(ctx, c.Namespace, "google", id, c.Spec.ClientIDRef, c.Spec.ClientSecretRef, sr, env)
 	if err != nil {
 		return ConnectorEntry{}, nil, err
 	}
@@ -377,10 +222,10 @@ func buildLinkedInConnector(
 	ctx context.Context,
 	c *dexv1.DexLinkedInConnector,
 	sr SecretResolver,
-	envs map[string][]byte,
+	env *childEnv,
 ) (ConnectorEntry, []MountedSecret, error) {
 	id := connectorID(c.Name, c.Spec.ID)
-	clientID, csRef, err := resolveOAuthCreds(ctx, c.Namespace, "linkedin", id, c.Spec.ClientIDRef, c.Spec.ClientSecretRef, sr, envs)
+	clientID, csRef, err := resolveOAuthCreds(ctx, c.Namespace, "linkedin", id, c.Spec.ClientIDRef, c.Spec.ClientSecretRef, sr, env)
 	if err != nil {
 		return ConnectorEntry{}, nil, err
 	}
@@ -403,10 +248,10 @@ func buildMicrosoftConnector(
 	ctx context.Context,
 	c *dexv1.DexMicrosoftConnector,
 	sr SecretResolver,
-	envs map[string][]byte,
+	env *childEnv,
 ) (ConnectorEntry, []MountedSecret, error) {
 	id := connectorID(c.Name, c.Spec.ID)
-	clientID, csRef, err := resolveOAuthCreds(ctx, c.Namespace, "microsoft", id, c.Spec.ClientIDRef, c.Spec.ClientSecretRef, sr, envs)
+	clientID, csRef, err := resolveOAuthCreds(ctx, c.Namespace, "microsoft", id, c.Spec.ClientIDRef, c.Spec.ClientSecretRef, sr, env)
 	if err != nil {
 		return ConnectorEntry{}, nil, err
 	}
@@ -444,10 +289,10 @@ func buildOIDCConnector(
 	ctx context.Context,
 	c *dexv1.DexOIDCConnector,
 	sr SecretResolver,
-	envs map[string][]byte,
+	env *childEnv,
 ) (ConnectorEntry, []MountedSecret, error) {
 	id := connectorID(c.Name, c.Spec.ID)
-	clientID, csRef, err := resolveOAuthCreds(ctx, c.Namespace, "oidc", id, c.Spec.ClientIDRef, c.Spec.ClientSecretRef, sr, envs)
+	clientID, csRef, err := resolveOAuthCreds(ctx, c.Namespace, "oidc", id, c.Spec.ClientIDRef, c.Spec.ClientSecretRef, sr, env)
 	if err != nil {
 		return ConnectorEntry{}, nil, err
 	}
@@ -532,10 +377,10 @@ func buildOAuth2Connector(
 	ctx context.Context,
 	c *dexv1.DexOAuth2Connector,
 	sr SecretResolver,
-	envs map[string][]byte,
+	env *childEnv,
 ) (ConnectorEntry, []MountedSecret, error) {
 	id := connectorID(c.Name, c.Spec.ID)
-	clientID, csRef, err := resolveOAuthCreds(ctx, c.Namespace, "oauth2", id, c.Spec.ClientIDRef, c.Spec.ClientSecretRef, sr, envs)
+	clientID, csRef, err := resolveOAuthCreds(ctx, c.Namespace, "oauth2", id, c.Spec.ClientIDRef, c.Spec.ClientSecretRef, sr, env)
 	if err != nil {
 		return ConnectorEntry{}, nil, err
 	}
@@ -601,10 +446,10 @@ func buildOpenShiftConnector(
 	ctx context.Context,
 	c *dexv1.DexOpenShiftConnector,
 	sr SecretResolver,
-	envs map[string][]byte,
+	env *childEnv,
 ) (ConnectorEntry, []MountedSecret, error) {
 	id := connectorID(c.Name, c.Spec.ID)
-	clientID, csRef, err := resolveOAuthCreds(ctx, c.Namespace, "openshift", id, c.Spec.ClientIDRef, c.Spec.ClientSecretRef, sr, envs)
+	clientID, csRef, err := resolveOAuthCreds(ctx, c.Namespace, "openshift", id, c.Spec.ClientIDRef, c.Spec.ClientSecretRef, sr, env)
 	if err != nil {
 		return ConnectorEntry{}, nil, err
 	}
@@ -640,10 +485,10 @@ func buildAtlassianCrowdConnector(
 	ctx context.Context,
 	c *dexv1.DexAtlassianCrowdConnector,
 	sr SecretResolver,
-	envs map[string][]byte,
+	env *childEnv,
 ) (ConnectorEntry, []MountedSecret, error) {
 	id := connectorID(c.Name, c.Spec.ID)
-	clientID, csRef, err := resolveOAuthCreds(ctx, c.Namespace, "crowd", id, c.Spec.ClientIDRef, c.Spec.ClientSecretRef, sr, envs)
+	clientID, csRef, err := resolveOAuthCreds(ctx, c.Namespace, "crowd", id, c.Spec.ClientIDRef, c.Spec.ClientSecretRef, sr, env)
 	if err != nil {
 		return ConnectorEntry{}, nil, err
 	}
@@ -674,10 +519,10 @@ func buildGiteaConnector(
 	ctx context.Context,
 	c *dexv1.DexGiteaConnector,
 	sr SecretResolver,
-	envs map[string][]byte,
+	env *childEnv,
 ) (ConnectorEntry, []MountedSecret, error) {
 	id := connectorID(c.Name, c.Spec.ID)
-	clientID, csRef, err := resolveOAuthCreds(ctx, c.Namespace, "gitea", id, c.Spec.ClientIDRef, c.Spec.ClientSecretRef, sr, envs)
+	clientID, csRef, err := resolveOAuthCreds(ctx, c.Namespace, "gitea", id, c.Spec.ClientIDRef, c.Spec.ClientSecretRef, sr, env)
 	if err != nil {
 		return ConnectorEntry{}, nil, err
 	}
@@ -723,10 +568,10 @@ func buildBitbucketConnector(
 	ctx context.Context,
 	c *dexv1.DexBitbucketConnector,
 	sr SecretResolver,
-	envs map[string][]byte,
+	env *childEnv,
 ) (ConnectorEntry, []MountedSecret, error) {
 	id := connectorID(c.Name, c.Spec.ID)
-	clientID, csRef, err := resolveOAuthCreds(ctx, c.Namespace, "bitbucket", id, c.Spec.ClientIDRef, c.Spec.ClientSecretRef, sr, envs)
+	clientID, csRef, err := resolveOAuthCreds(ctx, c.Namespace, "bitbucket", id, c.Spec.ClientIDRef, c.Spec.ClientSecretRef, sr, env)
 	if err != nil {
 		return ConnectorEntry{}, nil, err
 	}
@@ -753,7 +598,7 @@ func buildKeystoneConnector(
 	ctx context.Context,
 	c *dexv1.DexKeystoneConnector,
 	sr SecretResolver,
-	envs map[string][]byte,
+	env *childEnv,
 ) (ConnectorEntry, []MountedSecret, error) {
 	id := connectorID(c.Name, c.Spec.ID)
 	cfg := map[string]any{
@@ -767,8 +612,7 @@ func buildKeystoneConnector(
 		cfg["keystoneUsername"] = c.Spec.KeystoneUsername
 	}
 	if c.Spec.KeystonePasswordRef != nil {
-		pwKey := connectorEnvKey("keystone", id, "PASSWORD")
-		pwRef, err := resolveEnvSecret(ctx, c.Namespace, *c.Spec.KeystonePasswordRef, pwKey, sr, envs)
+		pwRef, err := resolveEnvSecret(ctx, c.Namespace, *c.Spec.KeystonePasswordRef, connectorEnvBase("keystone", id), "PASSWORD", sr, env)
 		if err != nil {
 			return ConnectorEntry{}, nil, fmt.Errorf("keystonePassword: %w", err)
 		}

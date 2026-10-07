@@ -13,7 +13,7 @@ through the caller-provided `SecretResolver` func, which makes the whole package
 without a cluster.
 
 **Input:** the `DexInstallation`, a `ConnectorSet` (all 16 connector slices), all
-`DexStaticClient`s, and the resolver.
+`DexStaticClient`s (in render order, namespace/name — the controller sorts), and the resolver.
 
 **Output:**
 
@@ -22,6 +22,42 @@ without a cluster.
 | `ConfigYAML` | the rendered `config.yaml` for the config Secret |
 | `EnvSecretData` | env var name → value for the env Secret |
 | `MountedSecrets` | Secret keys that must be projected as files (TLS certificates, service-account JSON), with the namespace of the resource that referenced them. **Informational** — no code outside the builder reads it; operators add the volumes in their Dex Helm values ([docs/operations/runtime.md](../operations/runtime.md#file-material-is-yours-to-mount)) |
+| `Rejected` | every child of the input left out of the config, as `dexv1.RejectedChild` (kind, namespace, name, claimed ID, `DuplicateID` or `BuildFailed`, message), sorted by kind, namespace, name |
+| `DroppedTrustedPeers` | every `trustedPeers` entry left out, sorted by namespace, name, peer ID |
+| `ClientIDs` | namespace/name → the ID resolved from the spec or the Secret, for every client whose ID resolved, rendered or not — the controller records it in `status.clientID` |
+| `ConnectorCount`, `StaticClientCount` | what was rendered; local connectors count |
+
+`Build` fails only when the storage credentials cannot be resolved, when the YAML cannot be
+marshalled, and with `ErrNoConnector` (the connector guard). With `ErrNoConnector` the returned
+`Output` still carries `Rejected` and `DroppedTrustedPeers`, but no config.
+
+## Claims, the contest and skip-and-report
+
+Every child goes through [render.go](../../internal/builder/render.go) as a `renderUnit`: what it
+claims, how to build it, what became of it. The decisions are
+[ADR 0008](../adr/0008-an-id-renders-for-one-child-only-and-a-failing-child-is-left-out-instead-of-failing-the-render.md)
+and [ADR 0009](../adr/0009-a-client-trusts-only-peers-held-in-its-own-namespace.md).
+
+1. **Storage** builds first into the env and fails the render on error.
+2. **Claims.** `connectorUnits` creates one unit per connector in render order, claiming the
+   effective ID (`connectorID`); `clientUnits` one per client, claiming `spec.clientID` or the
+   `client-id` from the Secret (`resolveClientID`), falling back to `status.clientID` when the
+   Secret does not resolve. An empty ID is a build failure, never a claim — Dex refuses to start
+   on a client without one.
+3. **`reserveLocal`** marks connectors with ID `local` while a `DexLocalConnector` exists.
+4. **`decide`** runs `contest` per category: one claimant wins; among several, the sole claimant in
+   the installation's namespace wins; otherwise nobody. `contest` is pure and order-independent.
+5. **`buildUnits`** builds every unit in env priority order (`byEnvPriority`: installation's
+   namespace, oldest, kind, namespace, name). A winner builds into the render's env and renders
+   on success; every other unit builds **dry** (a `childEnv` without the render's env), only to
+   learn whether its own build fails — a loser that fails is `BuildFailed`, not `DuplicateID`.
+6. **`filterTrustedPeers`** narrows each rendered client's `trustedPeers` to IDs whose holder —
+   the contest winner, rendered or failed — sits in the client's own namespace.
+7. **`noConnectorError`** is the connector guard; otherwise the rendered connectors and clients
+   are assembled in render order, and CORS origins come from rendered clients only.
+
+A build function never fails the render: it returns its error, and the unit is reported. Adding a
+connector kind means adding one `addConnectorUnits` line, nothing else in this flow.
 
 ## Conventions encoded here
 
@@ -30,10 +66,16 @@ Documented for users in the README's naming conventions; the rule is
 
 - Connector client secrets: `<TYPE>_<ID>_CLIENT_SECRET`; special cases `LDAP_<ID>_BIND_PW`,
   `KEYSTONE_<ID>_PASSWORD`.
-- Static client secrets: `<RESOURCE_NAME>_CLIENT_SECRET`, with an explicit collision check across
-  clients.
+- Static client secrets: `<RESOURCE_NAME>_CLIENT_SECRET`.
 - Storage passwords: `STORAGE_POSTGRES_PASSWORD`, `STORAGE_MYSQL_PASSWORD`.
 - Every name goes through `sanitizeEnvKey`: upper case, every non-alphanumeric character → `_`.
+- Keys are assigned through a `childEnv` per child ([envvar.go](../../internal/builder/envvar.go)):
+  `set(base, field, value)` returns the plain key `<BASE>_<FIELD>` when no earlier child (in env
+  priority order) holds it, else the fallback key `<BASE>_<HASH>_<FIELD>` (`childHash`: 8 hex
+  characters of SHA-256 over kind/namespace/name), and fails only when both are taken.
+  `commit` publishes the child's keys after a successful build. The base is `connectorEnvBase`
+  (`<type>_<id>`), the client's `metadata.name`, or `storageEnvBase`. Never write into the env map
+  directly — `resolveEnvSecret` and `childEnv.set` are the only ways in.
 - Mount paths: `/etc/dex/certs/<id>-<field>.pem`; Google service account
   `/etc/dex/secrets/<id>-service-account.json`; storage TLS `/etc/dex/certs/<storage>-<field>.pem`.
 - The connector ID is `spec.id`, else `metadata.name` (`connectorID`).
@@ -45,8 +87,8 @@ Documented for users in the README's naming conventions; the rule is
 
 `DexStaticClientSpec` sources the client ID either from `secretRef` (confidential) or from the
 inline `clientID` field (public/secretless, PKCE — supported by Dex since v2.24.0).
-`buildOneStaticClient` ([clients.go](../../internal/builder/clients.go)) branches on
-`SecretRef == nil` and then skips secret resolution, the env-key collision check and the
+`resolveClientID` and `buildOneStaticClient` ([clients.go](../../internal/builder/clients.go))
+branch on `SecretRef == nil`; a secretless client skips secret resolution, the env key and the
 `EnvSecretData` entry entirely, leaving `secretEnv` unset in the config.
 
 There is **no admission webhook** in this repo. All conditional validation is done with CEL
@@ -67,8 +109,9 @@ integration tests (the envtest API server enforces CEL). The decision is
 
 `spec.cors` on a `DexStaticClient` opts that client into contributing the origins of its own https
 `redirectURIs` to the installation's `web.allowedOrigins`. `deriveCORSOrigins` runs in `Build` over
-the *spec-level* clients (before `buildStaticClients` flattens them — Dex has no per-client CORS,
+the *spec-level* objects of the rendered clients (`renderedClients` — Dex has no per-client CORS,
 so nothing lands in the rendered `staticClients` entry) and `assembleWebConfig` merges the result.
+A rejected client contributes no origin.
 
 Decisions worth knowing before touching this — settled with the owner, recorded in
 [ADR 0005](../adr/0005-a-static-client-opts-in-to-derive-its-cors-origins-from-its-own-https-redirect-uris.md),
@@ -95,6 +138,9 @@ not to be reverted silently:
 ## Tests
 
 The builder's unit tests are in [builder_test.go](../../internal/builder/builder_test.go) (helpers
-`minimalInstallation`, `mockResolver`, `parseYAML`) and
+`minimalInstallation`, `mockResolver`, `parseYAML`),
+[contest_test.go](../../internal/builder/contest_test.go) (claims, contest, skip-and-report, the
+connector guard, env key priority, trusted peers; helpers `confClient`, `pubClient`,
+`clientSecrets`, `oidcConn`, `build`) and
 [builder_dexschema_test.go](../../internal/builder/builder_dexschema_test.go), which pins the
 rendered keys to Dex's schema (`assertNoKeys`). More in [testing.md](testing.md).

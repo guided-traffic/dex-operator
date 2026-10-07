@@ -40,6 +40,11 @@ change.
 - **Two allowlists, two categories.** `allowedNamespaces` admits static clients (empty denies
   all), `allowedConnectorNamespaces` connectors (omitted admits only the installation's own
   namespace) ([ADR 0006](../adr/0006-two-namespace-allowlists-one-per-child-category-exact-names-only.md)).
+- **One child per ID, and no child fails the render.** A client or connector ID renders for its
+  sole claimant or the sole claimant in the installation's namespace, else for nobody; a child
+  whose build fails is left out and reported, and a client trusts only peers in its own namespace
+  ([ADR 0008](../adr/0008-an-id-renders-for-one-child-only-and-a-failing-child-is-left-out-instead-of-failing-the-render.md),
+  [ADR 0009](../adr/0009-a-client-trusts-only-peers-held-in-its-own-namespace.md)).
 - **No webhook.** Conditional validation is CEL on the spec; everything that needs another object
   is found at build time ([docs/security/validation.md](../security/validation.md)).
 - **`make` is the entry point**, from the repository root. CI runs Makefile targets; so do you
@@ -54,7 +59,7 @@ change.
 | [repository-layout.md](repository-layout.md) | You are new and want the tree, and which paths are generated |
 | [package-map.md](package-map.md) | You are looking for where something lives and what each file is responsible for |
 | [architecture.md](architecture.md) | You want the picture: the two controller kinds, the watches, the reconcile, determinism, the `ChildObject` interface, what runs where |
-| [builder.md](builder.md) | You touch the render: `Build`, its input and output, the naming conventions, static clients, derived CORS origins |
+| [builder.md](builder.md) | You touch the render: `Build`, its input and output, claims, the contest and skip-and-report, the naming conventions, static clients, derived CORS origins |
 | [helm-chart.md](helm-chart.md) | You touch the chart: the CRD hook, the templates, which files are generated |
 | [build-test-lint.md](build-test-lint.md) | You want to build, generate, run, test or lint anything |
 | [testing.md](testing.md) | You add a test, choose a tier, or a suite fails and you need to know what it is for |
@@ -67,12 +72,12 @@ change.
 | Flow | The fact | Where |
 |---|---|---|
 | Startup | The manager sets up the `DexInstallationReconciler` first — it registers the field indexes — then one generic reconciler per child kind; leader election is on in the chart, metrics off | [architecture.md](architecture.md#what-runs-where), [cmd/main.go](../../cmd/main.go) |
-| An installation reconcile | List the children by index, filter by the two allowlists, sort, build, write the config Secret (compared as YAML) and the env Secret (compared as bytes), restart Dex if the config changed, write the status | [architecture.md](architecture.md#the-reconcile-of-an-installation) |
-| A child reconcile | The installation exists and admits the child's namespace → `Ready=True`; otherwise `Ready=False` and a requeue after five minutes; nothing is built | [architecture.md](architecture.md#child-errors) |
+| An installation reconcile | List the children by index, filter by the two allowlists, sort, build (contest per ID, failing children left out), write the config Secret (compared as YAML) and the env Secret (compared as bytes), restart Dex if the config changed, write the status with the rejected children, patch each client's `status.clientID` | [architecture.md](architecture.md#the-reconcile-of-an-installation) |
+| A child reconcile | The installation exists, admits the child's namespace and does not list it in `status.rejectedChildren` → `Ready=True`; otherwise `Ready=False` and a requeue after five minutes; nothing is built | [architecture.md](architecture.md#child-errors) |
 | A child changes | Its watch maps it to its `installationRef`, and the installation renders again | [architecture.md](architecture.md#how-a-change-reaches-the-render) |
 | A Secret changes | The Secret index maps it to every installation whose children reference it; a deletion maps to nothing | [architecture.md](architecture.md#how-a-change-reaches-the-render) |
-| An installation's spec changes | It renders again, and every child reconciler re-evaluates the children that reference it | [architecture.md](architecture.md#how-a-change-reaches-the-render) |
-| A credential is rendered | Resolved in the child's namespace, written to the env Secret as `<TYPE>_<ID>_<FIELD>`, referenced as `$VAR` (`secretEnv` for a static client) | [builder.md](builder.md#conventions-encoded-here) |
+| An installation's spec or its rejected children change | It renders again (spec), and every child reconciler re-evaluates the children that reference it | [architecture.md](architecture.md#how-a-change-reaches-the-render) |
+| A credential is rendered | Resolved in the child's namespace, written to the env Secret as `<TYPE>_<ID>_<FIELD>` — or its fallback key when an earlier child holds that name —, referenced as `$VAR` (`secretEnv` for a static client) | [builder.md](builder.md#conventions-encoded-here) |
 | A file is needed | A fixed path in the config and an entry in `MountedSecrets`; nothing mounts it | [builder.md](builder.md#one-entry-point-no-cluster) |
 | A CRD changes | `make generate-all` regenerates it and copies it into the chart; the chart's pre-upgrade hook applies it | [helm-chart.md](helm-chart.md) |
 | A release | Conventional Commits on `main` → semantic-release tags → the image and the chart are published | [ci-and-release.md](ci-and-release.md) |

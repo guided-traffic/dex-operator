@@ -29,6 +29,8 @@ changes of individual releases that ask something of an installation, are in the
 - `kubectl get dexinstallations -A` — every installation `READY` `True`.
 - The children's `Ready` conditions — a release that changes admission shows refused children
   there, with the reason ([runtime.md](runtime.md#reading-the-conditions)).
+- `kubectl get dexinstallations -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}: {.status.rejectedChildren}{.status.droppedTrustedPeers}{"\n"}{end}'`
+  — the children and `trustedPeers` entries each installation leaves out of its config.
 - After a **failed** upgrade: the hook resources stay when the Job fails. Check that the
   `<release>-crd-upgrade` ServiceAccount, ClusterRole and ClusterRoleBinding are gone once the
   upgrade succeeds — the ClusterRole may write every CRD of the cluster

@@ -72,7 +72,7 @@ func newReconciler(t *testing.T, objs ...client.Object) (*controller.DexInstalla
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(objs...).
-		WithStatusSubresource(&dexv1.DexInstallation{}).
+		WithStatusSubresource(&dexv1.DexInstallation{}, &dexv1.DexStaticClient{}, &dexv1.DexOIDCConnector{}, &dexv1.DexOAuth2Connector{}, &dexv1.DexLocalConnector{}).
 		WithIndex(&dexv1.DexOIDCConnector{}, controller.InstallationRefIndexField, controller.InstallationRefIndexFunc).
 		WithIndex(&dexv1.DexLDAPConnector{}, controller.InstallationRefIndexField, controller.InstallationRefIndexFunc).
 		WithIndex(&dexv1.DexGitHubConnector{}, controller.InstallationRefIndexField, controller.InstallationRefIndexFunc).

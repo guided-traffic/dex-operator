@@ -2,9 +2,10 @@
 
 ## Status
 
-Accepted. Date: 2026-10-07, recording decisions built in three steps: the Secret watch and the
-semantic comparison of the config Secret in 1.1.4 (2026-04-07), the deletions ignored in 1.2.0
-(2026-04-07), the sorted children in 2.0.3 (2026-07-21).
+Accepted, amended 2026-10-07 (a consequence: the claim of a client whose Secret does not resolve
+comes from its own status). Date: 2026-10-07, recording decisions built in three steps: the Secret
+watch and the semantic comparison of the config Secret in 1.1.4 (2026-04-07), the deletions
+ignored in 1.2.0 (2026-04-07), the sorted children in 2.0.3 (2026-07-21).
 
 **Implemented.**
 
@@ -66,6 +67,12 @@ nothing.)
   builder have to keep existing output stable (ADR 0005 D3 is an instance).
 - A drifted Secret that nobody touches — edited back by hand to an old value without an event the
   watch sees — stays drifted until the next event. D6 accepts that.
+- The render reads one piece of state it wrote itself: the claim of a confidential client whose
+  Secret does not resolve comes from that client's `status.clientID`
+  ([ADR 0008](0008-an-id-renders-for-one-child-only-and-a-failing-child-is-left-out-instead-of-failing-the-render.md)
+  D4). It counts only while the Secret does not resolve, so every other render stays a function of
+  specs and Secrets; D1 is unchanged — which child holds an ID never depends on the order of the
+  children.
 
 ## Alternatives Considered
 

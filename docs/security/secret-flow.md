@@ -28,9 +28,14 @@ A tenant can expose to the operator only material it can already create in its o
 The env var names ([internal/builder/envvar.go](../../internal/builder/envvar.go)):
 `<TYPE>_<ID>_<FIELD>` for a connector (special cases `LDAP_<ID>_BIND_PW`,
 `KEYSTONE_<ID>_PASSWORD`), `<RESOURCE_NAME>_CLIENT_SECRET` for a static client, `STORAGE_<FIELD>`
-for storage — each upper-cased, every other character replaced by `_`. Two static clients whose
-names sanitize to the same key fail the build instead of silently overwriting each other's secret
-([internal/builder/clients.go](../../internal/builder/clients.go)). The mount paths:
+for storage — each upper-cased, every other character replaced by `_`. No two children share a
+key, across storage, connectors and clients: keys are assigned in one priority order — storage,
+then the installation's namespace, then the oldest object — and a child whose plain key is taken
+gets the fallback key `<BASE>_<HASH>_<FIELD>`, the hash being 8 hex characters of SHA-256 over
+its kind, namespace and name (`childEnv.set`). A client named like a connector's key, or two
+connectors whose IDs sanitize alike, therefore never overwrite each other's credential, and a
+child in the installation's namespace always keeps its plain key
+([ADR 0002](../adr/0002-custom-resources-carry-no-secret-values-credentials-reach-dex-through-an-env-secret.md) D3). The mount paths:
 `/etc/dex/certs/<id>-<field>.pem` for connector certificates, `/etc/dex/secrets/<id>-service-account.json`
 for a Google service account, `/etc/dex/certs/<postgres|etcd|mysql>-<ca|client-cert|client-key>.pem`
 for storage TLS.

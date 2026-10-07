@@ -17,14 +17,14 @@ generate `config/rbac/role.yaml` for the kustomize deployment and say the same.
 | `secrets` (cluster-wide) | get, list, watch, **create, update, patch** — **no delete** | read the credentials children reference in their own namespaces, write the config and env Secrets |
 | `deployments` (apps) | get, list, watch, **patch** | the rollout-restart annotation only |
 | the sixteen connector kinds and `dexstaticclients` | get, list, watch, update, patch | collect children; the operator writes only their status |
-| their `/status` and `dexinstallations/status` | get, update, patch | the `Ready` condition, the counts |
+| their `/status` and `dexinstallations/status` | get, update, patch | the conditions, the counts, the installation's report on rejected children and dropped peers, a static client's `status.clientID` |
 | `dexinstallations` | get, list, watch, **create, update, patch, delete** | get, list and watch are used; the operator never creates, updates or deletes an installation ([H-14](#h-14)) |
 | `dexinstallations/finalizers` | update | unused — the operator sets no finalizer |
 
 The operator's own writes are, in full: the status update of an installation and of a child, the
-create and patch of a generated Secret, and the patch of the Dex Deployment
-([internal/controller/](../../internal/controller/) `Status().Update`, `applySecret`,
-`triggerRolloutRestart`).
+status patch of a static client's `status.clientID`, the create and patch of a generated Secret,
+and the patch of the Dex Deployment ([internal/controller/](../../internal/controller/)
+`Status().Update`, `recordClientIDs`, `applySecret`, `triggerRolloutRestart`).
 
 **Consequences:**
 
