@@ -50,13 +50,18 @@ v9 (major updates disabled in `renovate.json`): with v10,
 `@semantic-release/release-notes-generator` silently drops all commits and the release notes come
 out empty.
 
-**Indirect Go modules** (`// indirect` in `go.mod`) get minor, patch and digest updates; their majors
-stay disabled, because a transitive module's next major is a different module path that
-controller-runtime and the Kubernetes modules still pin to the old one. The gomod manager extracts
-indirect requirements disabled, and the enable rule is evaluated before the lookup, where no update
-type exists yet. That rule therefore must not carry `matchUpdateTypes` or any other post-lookup
-matcher: it would never match, and no indirect module would be looked up at all — that is how
-`golang.org/x/net` stayed on a vulnerable release. A second rule after it takes the majors back out.
+**Indirect Go modules** (`// indirect` in `go.mod`) get minor and patch updates. Their majors stay
+disabled, because a transitive module's next major is a different module path that
+controller-runtime and the Kubernetes modules still pin to the old one. Their digest updates stay
+disabled too: a pseudo-version is a commit a parent module pinned, not a release, and the
+default-branch head it would move to can break the parent's release — `k8s.io/kube-openapi`'s head
+requires `sigs.k8s.io/structured-merge-diff/v7`, while `k8s.io/apimachinery` v0.37 is built on v6.
+Such a module moves when its parent does, through `go mod tidy` in the parent's update. The gomod
+manager extracts indirect requirements disabled, and the enable rule is evaluated before the lookup,
+where no update type exists yet. That rule therefore must not carry `matchUpdateTypes` or any other
+post-lookup matcher: it would never match, and no indirect module would be looked up at all — that
+is how `golang.org/x/net` stayed on a vulnerable release. A second rule after it takes the majors
+and digests back out.
 
 **The Go version group** (`renovate/go-version`) carries the toolchain (`go.mod`, `Containerfile`,
 `GO_VERSION` in [release.yml](../../.github/workflows/release.yml)), `golang.org/x/*`, and the minor
