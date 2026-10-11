@@ -23,6 +23,11 @@ On pull requests to `main`, pushes to `main` and `workflow_dispatch`:
 A new job goes into the `needs:` list of `semantic-release` in the same change, or a release can
 be cut without it.
 
+There is one pipeline per pull request and per branch (`concurrency` in the workflow). A new push to
+a pull request — a Renovate rebase, for instance — cancels the run for the old head, whose checks
+no longer count. On `main` a running pipeline finishes; of the pushes queued behind it only the
+newest runs, since `semantic-release` publishes only when its commit is still the head of `main`.
+
 ## Versioning
 
 [semantic-release](https://semantic-release.gitbook.io/) ([.releaserc.json](../../.releaserc.json),
