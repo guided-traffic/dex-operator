@@ -2,7 +2,8 @@
 
 ## Code
 
-- Go 1.27 (`go 1.27.1` in [go.mod](../../go.mod)), controller-runtime.
+- Go 1.27 (the patch release is the `go` directive in [go.mod](../../go.mod), kept current by
+  Renovate), controller-runtime.
 - Cyclomatic complexity below 15 per function (`make cyclo`); refactor rather than raise it.
 - Errors wrap with `%w`; a build error names the resource and the Secret reference it failed on,
   never a Secret's value.
