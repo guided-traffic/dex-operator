@@ -102,7 +102,7 @@
       "enabled": true
     },
     {
-      "description": "Go modules (indirect): disable major updates. A transitive dep's next major is a different module path that parent deps (controller-runtime, k8s) still pin to the old major, so the bump can never build and Renovate would rebase it forever. Must stay after the enable rule above: the later rule wins.",
+      "description": "Go modules (indirect): disable major and digest updates. A transitive dep's next major is a different module path that parent deps (controller-runtime, k8s) still pin to the old major, so the bump can never build and Renovate would rebase it forever. A pseudo-version is a commit a parent pinned, not a release: the default-branch head it would move to can break the parent's release (k8s.io/kube-openapi's head requires sigs.k8s.io/structured-merge-diff/v7, k8s.io/apimachinery v0.37 is built on v6), so such modules move only when their parent does. Must stay after the enable rule above: the later rule wins.",
       "matchManagers": [
         "gomod"
       ],
@@ -110,7 +110,8 @@
         "indirect"
       ],
       "matchUpdateTypes": [
-        "major"
+        "major",
+        "digest"
       ],
       "enabled": false
     },
