@@ -24,13 +24,13 @@ import (
 )
 
 // buildStorage converts a DexStorageSpec into a Dex StorageConfig.
-// Credentials are extracted into envs and TLS files are added to mounts.
+// Credentials are extracted into env and TLS files are added to mounts.
 func buildStorage(
 	ctx context.Context,
 	spec dexv1.DexStorageSpec,
 	sr SecretResolver,
 	namespace string,
-	envs map[string][]byte,
+	env *childEnv,
 ) (StorageConfig, []MountedSecret, error) {
 	sc := StorageConfig{Type: string(spec.Type)}
 	var mounts []MountedSecret
@@ -49,7 +49,7 @@ func buildStorage(
 
 	case dexv1.StoragePostgres:
 		if spec.Postgres != nil {
-			cfg, pgMounts, err := buildPostgresConfig(ctx, spec.Postgres, sr, namespace, envs)
+			cfg, pgMounts, err := buildPostgresConfig(ctx, spec.Postgres, sr, namespace, env)
 			if err != nil {
 				return StorageConfig{}, nil, fmt.Errorf("postgres storage: %w", err)
 			}
@@ -69,7 +69,7 @@ func buildStorage(
 
 	case dexv1.StorageMySQL:
 		if spec.MySQL != nil {
-			cfg, myMounts, err := buildMySQLConfig(ctx, spec.MySQL, sr, namespace, envs)
+			cfg, myMounts, err := buildMySQLConfig(ctx, spec.MySQL, sr, namespace, env)
 			if err != nil {
 				return StorageConfig{}, nil, fmt.Errorf("mysql storage: %w", err)
 			}
@@ -86,7 +86,7 @@ func buildPostgresConfig(
 	s *dexv1.DexPostgresStorageSpec,
 	sr SecretResolver,
 	namespace string,
-	envs map[string][]byte,
+	env *childEnv,
 ) (map[string]any, []MountedSecret, error) {
 	cfg := map[string]any{
 		cfgKeyHost: s.Host,
@@ -97,8 +97,7 @@ func buildPostgresConfig(
 	var mounts []MountedSecret
 
 	if s.PasswordRef != nil {
-		envKey := storageEnvKey("POSTGRES_PASSWORD")
-		ref, err := resolveEnvSecret(ctx, namespace, *s.PasswordRef, envKey, sr, envs)
+		ref, err := resolveEnvSecret(ctx, namespace, *s.PasswordRef, storageEnvBase, "POSTGRES_PASSWORD", sr, env)
 		if err != nil {
 			return nil, nil, fmt.Errorf("postgres password: %w", err)
 		}
@@ -248,7 +247,7 @@ func buildMySQLConfig(
 	s *dexv1.DexMySQLStorageSpec,
 	sr SecretResolver,
 	namespace string,
-	envs map[string][]byte,
+	env *childEnv,
 ) (map[string]any, []MountedSecret, error) {
 	cfg := map[string]any{
 		cfgKeyHost: s.Host,
@@ -259,8 +258,7 @@ func buildMySQLConfig(
 	var mounts []MountedSecret
 
 	if s.PasswordRef != nil {
-		envKey := storageEnvKey("MYSQL_PASSWORD")
-		ref, err := resolveEnvSecret(ctx, namespace, *s.PasswordRef, envKey, sr, envs)
+		ref, err := resolveEnvSecret(ctx, namespace, *s.PasswordRef, storageEnvBase, "MYSQL_PASSWORD", sr, env)
 		if err != nil {
 			return nil, nil, fmt.Errorf("mysql password: %w", err)
 		}

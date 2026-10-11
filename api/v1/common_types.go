@@ -46,6 +46,13 @@ const (
 	ConditionTypeReady = "Ready"
 	// ConditionTypeError indicates the resource is in an error state.
 	ConditionTypeError = "Error"
+	// ConditionTypeChildrenRejected is True on a DexInstallation while
+	// status.rejectedChildren is non-empty.
+	ConditionTypeChildrenRejected = "ChildrenRejected"
+	// ConditionTypeTrustedPeersDropped is True on a DexInstallation while
+	// status.droppedTrustedPeers is non-empty, and on a DexStaticClient while
+	// any of its own trustedPeers entries is left out of the rendered config.
+	ConditionTypeTrustedPeersDropped = "TrustedPeersDropped"
 )
 
 // CommonStatus contains the shared status fields for all Dex CRDs.

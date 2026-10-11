@@ -1,0 +1,72 @@
+issuer: https://dex.example.com
+storage:
+    type: postgres
+    config:
+        database: dex
+        host: db.example.com
+        password: $STORAGE_POSTGRES_PASSWORD
+        user: dex
+web:
+    allowedOrigins:
+        - https://portal.example.com
+        - https://argocd.team-b.example.com
+        - https://grafana.team-a.example.com
+        - https://kubernetes.dex.example.com
+connectors:
+    - type: ldap
+      id: ldap
+      name: LDAP
+      config:
+        bindDN: cn=dex,dc=example,dc=com
+        bindPW: $LDAP_LDAP_BIND_PW
+        host: ldap.example.com:636
+        userSearch:
+            baseDN: ou=people,dc=example,dc=com
+            username: uid
+    - type: github
+      id: github
+      name: GitHub
+      config:
+        clientID: github-id
+        clientSecret: $GITHUB_GITHUB_CLIENT_SECRET
+    - type: oidc
+      id: okta
+      name: okta
+      config:
+        clientID: okta-id
+        clientSecret: $OIDC_OKTA_CLIENT_SECRET
+        issuer: https://okta.example.com
+    - type: oidc
+      id: corp-sso
+      name: keycloak
+      config:
+        clientID: keycloak-id
+        clientSecret: $OIDC_CORP_SSO_CLIENT_SECRET
+        issuer: https://keycloak.example.com
+staticClients:
+    - id: kubectl
+      name: kubectl
+      public: true
+    - id: kubernetes-id
+      secretEnv: KUBERNETES_CLIENT_SECRET
+      name: kubernetes
+      redirectURIs:
+        - https://kubernetes.dex.example.com/callback
+      trustedPeers:
+        - kubectl
+    - id: grafana-id
+      secretEnv: GRAFANA_CLIENT_SECRET
+      name: grafana
+      redirectURIs:
+        - https://grafana.team-a.example.com/callback
+      trustedPeers:
+        - grafana-cli
+    - id: grafana-cli
+      name: grafana-cli
+      public: true
+    - id: argocd-id
+      secretEnv: ARGOCD_CLIENT_SECRET
+      name: argocd
+      redirectURIs:
+        - https://argocd.team-b.example.com/callback
+enablePasswordDB: true

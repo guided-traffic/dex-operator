@@ -20,10 +20,12 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
+	"k8s.io/apimachinery/pkg/types"
 
 	dexv1 "github.com/guided-traffic/dex-operator/api/v1"
 )
@@ -86,45 +88,78 @@ type Output struct {
 	EnvSecretData map[string][]byte
 	// MountedSecrets lists Secret keys that must be projected as files.
 	MountedSecrets []MountedSecret
+
+	// Rejected lists the connectors and static clients of the input that are
+	// not part of the config, sorted by kind, namespace and name.
+	Rejected []dexv1.RejectedChild
+	// DroppedTrustedPeers lists the trustedPeers entries left out of the
+	// config, sorted by namespace, name and peer ID.
+	DroppedTrustedPeers []dexv1.DroppedTrustedPeer
+	// ClientIDs maps every static client of the input whose ID could be
+	// resolved from its spec or its Secret to that ID, rendered or not.
+	ClientIDs map[types.NamespacedName]string
+	// ConnectorCount is the number of rendered connectors, local ones included.
+	ConnectorCount int
+	// StaticClientCount is the number of rendered static clients.
+	StaticClientCount int
 }
 
 // Build constructs the Dex config YAML and companion env Secret data from the
 // provided [Input].  It calls [Input.Secrets] for every referenced Secret key.
+//
+// Every static client ID and every connector ID renders for at most one
+// child (see [contest]); a child whose build fails is left out instead of
+// failing the render.  Both are reported in [Output.Rejected].  Build fails
+// when the storage credentials cannot be resolved, and with [ErrNoConnector]
+// when connectors were collected but none of them renders.
 func Build(ctx context.Context, in Input) (Output, error) {
+	inst := in.Installation
 	envs := make(map[string][]byte)
-	var mounts []MountedSecret
 
-	storage, storageMounts, err := buildStorage(ctx, in.Installation.Spec.Storage, in.Secrets, in.Installation.Namespace, envs)
+	storageEnv := newChildEnv(envs, "DexInstallation", inst.Namespace, inst.Name)
+	storage, mounts, err := buildStorage(ctx, inst.Spec.Storage, in.Secrets, inst.Namespace, storageEnv)
 	if err != nil {
 		return Output{}, fmt.Errorf("building storage config: %w", err)
 	}
-	mounts = append(mounts, storageMounts...)
+	storageEnv.commit()
 
-	connEntries, connMounts, err := buildAllConnectors(ctx, in.Connectors, in.Secrets, envs)
-	if err != nil {
-		return Output{}, fmt.Errorf("building connector configs: %w", err)
+	local := len(in.Connectors.Local) > 0
+	connUnits := connectorUnits(in.Connectors, in.Secrets)
+	if local {
+		reserveLocal(connUnits)
 	}
+	decide(connUnits, inst.Namespace)
+	scUnits := clientUnits(ctx, in.StaticClients, in.Secrets)
+	decide(scUnits, inst.Namespace)
+
+	buildUnits(ctx, slices.Concat(connUnits, scUnits), inst.Namespace, envs)
+
+	out := Output{
+		Rejected:            rejectedChildren(inst, connUnits, scUnits),
+		DroppedTrustedPeers: filterTrustedPeers(scUnits),
+		ClientIDs:           resolvedClientIDs(scUnits),
+		ConnectorCount:      countRendered(connUnits) + len(in.Connectors.Local),
+		StaticClientCount:   countRendered(scUnits),
+	}
+	if err := noConnectorError(connUnits, local, out.Rejected); err != nil {
+		return out, err
+	}
+
+	connEntries, connMounts := renderedConnectors(connUnits)
 	mounts = append(mounts, connMounts...)
+	clients, clientObjs := renderedClients(scUnits, in.StaticClients)
 
-	clients, err := buildStaticClients(ctx, in.StaticClients, in.Secrets, envs)
-	if err != nil {
-		return Output{}, fmt.Errorf("building static client configs: %w", err)
-	}
-
-	corsOrigins := deriveCORSOrigins(in.StaticClients)
-
-	cfg := assembleDexConfig(in.Installation.Spec, storage, connEntries, clients, len(in.Connectors.Local) > 0, corsOrigins)
+	cfg := assembleDexConfig(inst.Spec, storage, connEntries, clients, local, deriveCORSOrigins(clientObjs))
 
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return Output{}, fmt.Errorf("marshaling dex config to YAML: %w", err)
 	}
 
-	return Output{
-		ConfigYAML:     data,
-		EnvSecretData:  envs,
-		MountedSecrets: mounts,
-	}, nil
+	out.ConfigYAML = data
+	out.EnvSecretData = envs
+	out.MountedSecrets = mounts
+	return out, nil
 }
 
 // assembleDexConfig builds the [DexConfig] from an installation spec and the
@@ -319,14 +354,26 @@ func assembleOAuth2Config(s *dexv1.DexOAuth2ConfigSpec) *OAuth2Config {
 	}
 }
 
-// resolveEnvSecret resolves a SecretKeyRef, stores the value under envKey in
-// envs, and returns the "$envKey" substitution reference.
-func resolveEnvSecret(ctx context.Context, namespace string, ref dexv1.SecretKeyRef, envKey string, sr SecretResolver, envs map[string][]byte) (string, error) {
+// resolveEnvSecret resolves a SecretKeyRef, stores the value in env under
+// the key env assigns for base and field, and returns the "$KEY"
+// substitution reference.
+func resolveEnvSecret(
+	ctx context.Context,
+	namespace string,
+	ref dexv1.SecretKeyRef,
+	base, field string,
+	sr SecretResolver,
+	env *childEnv,
+) (string, error) {
 	val, err := sr(ctx, namespace, ref)
 	if err != nil {
 		return "", fmt.Errorf("secret %s/%s[%s]: %w", namespace, ref.Name, ref.Key, err)
 	}
-	return envRef(envKey, val, envs), nil
+	key, err := env.set(base, field, val)
+	if err != nil {
+		return "", err
+	}
+	return "$" + key, nil
 }
 
 // resolveSecret resolves a SecretKeyRef and returns the plaintext value

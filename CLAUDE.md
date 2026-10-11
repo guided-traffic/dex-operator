@@ -43,10 +43,12 @@ Dex wird weiterhin über das offizielle Dex Helm Chart installiert. Der Operator
 ### DexInstallation
 Vollständige globale Dex-Konfiguration: Issuer, Storage, Web (inkl. CORS `allowedOrigins`/`allowedHeaders`), gRPC, Logger, Expiry.
 Zusätzlich: `configSecretName`, `envSecretName`, `allowedNamespaces` (Allowlist **nur für DexStaticClients**, `"*"` = alle, leer/fehlend = keine), `allowedConnectorNamespaces` (Allowlist **nur für Connectors**; fehlend = nur der eigene Namespace der Installation; gesetzt = abschließend; `"*"` nur als einziger Eintrag, `[]` per `MinItems=1` abgelehnt), optionaler Auto-Restart (`rolloutRestart.enabled`, `rolloutRestart.deploymentName`).
+Status: `connectorCount`/`staticClientCount` (nur gerenderte Children), `rejectedChildren` (Kind, Namespace, Name, beanspruchte ID, Reason `DuplicateID`|`BuildFailed`, Message) und `droppedTrustedPeers`, dazu die Conditions `ChildrenRejected` und `TrustedPeersDropped`. `Ready` heißt weiterhin nur: Config gerendert und beide Secrets geschrieben.
 
 ### DexStaticClient
 Referenziert eine DexInstallation per Name+Namespace. Enthält `redirectURIs`, `trustedPeers`, `displayName`, `public`.
 Die Client-Credentials kommen entweder aus einem bestehenden Secret im gleichen Namespace (`secretRef` mit Keys für `client-id` und `client-secret`) oder — bei public/secretless Clients — inline über `clientID`.
+`status.clientID` (Print-Column `Client ID`) hält die zuletzt aufgelöste ID, gepatcht vom Installation-Reconciler (`recordClientIDs`); solange das Secret fehlt, beansprucht der Client weiter diese ID. `trustedPeers` werden nur gerendert, wenn ein DexStaticClient im **eigenen Namespace** des vertrauenden Clients die Peer-ID hält; sonst gedroppt und gemeldet (`TrustedPeersDropped`, [ADR 0009](docs/adr/0009-a-client-trusts-only-peers-held-in-its-own-namespace.md)).
 
 ### Connector CRDs (je eine eigene CRD pro Typ)
 `DexLDAPConnector`, `DexGitHubConnector`, `DexSAMLConnector`, `DexGitLabConnector`, `DexOIDCConnector`, `DexOAuth2Connector`, `DexGoogleConnector`, `DexLinkedInConnector`, `DexMicrosoftConnector`, `DexAuthProxyConnector`, `DexBitbucketConnector`, `DexLocalConnector`, `DexOpenShiftConnector`, `DexAtlassianCrowdConnector`, `DexGiteaConnector`, `DexKeystoneConnector`
@@ -57,7 +59,8 @@ Jede referenziert eine DexInstallation per Name+Namespace und enthält die typ-s
 - Bei Reconciliation einer DexInstallation: Alle zugehörigen Connectors und Static Clients aus erlaubten Namespaces sammeln, Config-YAML + Env-Secret bauen, Secrets im Dex-Namespace schreiben
 - Bei Reconciliation eines Clients/Connectors: Die referenzierte DexInstallation triggern
 - Namespace-Allowlist-Validierung bei jedem Client/Connector (Kategorie-abhängig: `checkChildNamespace` in `internal/controller/namespace.go`)
-- Child-Reconciler watchen zusätzlich `DexInstallation` (nur Generation-Änderungen) und re-evaluieren den `Ready`-Status der referenzierenden Children (`mapInstallationToChildren`); der DexInstallation-Controller muss zuerst aufgesetzt werden, weil er den `InstallationRefIndexField`-Index registriert
+- Child-Reconciler watchen zusätzlich `DexInstallation` (Generation-Änderungen **oder** geänderte `status.rejectedChildren`/`status.droppedTrustedPeers`, `childReportChangedPredicate`) und re-evaluieren die Conditions der referenzierenden Children (`mapInstallationToChildren`, `findRejectedChild`); der DexInstallation-Controller muss zuerst aufgesetzt werden, weil er den `InstallationRefIndexField`-Index registriert
+- ID-Contest ([ADR 0008](docs/adr/0008-an-id-renders-for-one-child-only-and-a-failing-child-is-left-out-instead-of-failing-the-render.md)): Client-IDs und Connector-IDs (über alle 16 Kinds) rendern je für genau ein Child — einziger Claimant, oder einziger Claimant im Namespace der Installation, sonst niemand (`contest` in `internal/builder/render.go`). `local` ist reserviert, solange ein `DexLocalConnector` rendert. Ein fehlschlagendes Child wird übersprungen und gemeldet (`BuildFailed`), nur Storage und der Connector-Guard (`ErrNoConnector`: Connectors gesammelt, keiner rendert, kein Local) brechen den Render ab
 - Optionaler Rollout-Restart des Dex-Deployments bei Config-Änderung
 
 ## Repository & Registry
@@ -77,11 +80,17 @@ The `Build(ctx, Input) (Output, error)` function is the single entry point.
 - `ConfigYAML []byte` — ready-to-store Dex `config.yaml`
 - `EnvSecretData map[string][]byte` — env vars for the Dex env Secret (`$VAR` refs in config)
 - `MountedSecrets []MountedSecret` — Secret keys that the controller must mount as files (TLS certs, service-account JSON, etc.)
+- `Rejected []dexv1.RejectedChild`, `DroppedTrustedPeers []dexv1.DroppedTrustedPeer` — what was left out, sorted
+- `ClientIDs map[types.NamespacedName]string` — resolved ID of every client whose ID resolved (for `status.clientID`)
+- `ConnectorCount`, `StaticClientCount` — rendered children only
+
+With `ErrNoConnector` the Output carries `Rejected`/`DroppedTrustedPeers` but no config; the controller keeps the last written config.
 
 Env-var naming convention:
 - Connector credential: `<TYPE>_<ID>_<FIELD>` (e.g. `OIDC_OKTA_CLIENT_SECRET`)
 - Static client secret: `<RESOURCE_NAME>_CLIENT_SECRET` (e.g. `GRAFANA_CLIENT_SECRET`)
 - Storage credential: `STORAGE_<FIELD>` (e.g. `STORAGE_POSTGRES_PASSWORD`)
+- Keys are assigned via `childEnv` in one priority order across storage, connectors and clients (storage, installation namespace, oldest, kind/ns/name — `byEnvPriority`); a child whose plain key is taken gets `<BASE>_<HASH>_<FIELD>` (8 hex chars SHA-256 over kind/namespace/name); both taken → `BuildFailed`. Non-colliding keys are byte-identical to v2.3.0 (golden: `internal/controller/testdata/render-compat-v2.3.0/`)
 
 CA cert data (LDAP `rootCAData`) is base64-encoded and inlined in config.
 File-path-only certs (SAML `ca`, client TLS, service accounts) are added to `MountedSecrets`; no code outside the builder reads them yet — operators mount the files in their Dex Helm values (`docs/operations/runtime.md`).
@@ -90,16 +99,17 @@ File-path-only certs (SAML `ca`, client TLS, service accounts) are added to `Mou
 
 `DexStaticClientSpec` sources the client ID either from `secretRef` (confidential) or
 from the inline `clientID` field (public/secretless, PKCE — supported by Dex since
-v2.24.0). The two are mutually exclusive; `buildOneStaticClient` branches on
-`SecretRef == nil` and then skips secret resolution, the env-key collision check and
-the `EnvSecretData` entry entirely, leaving `secretEnv` unset in the config.
+v2.24.0). The two are mutually exclusive; `resolveClientID` and `buildOneStaticClient`
+branch on `SecretRef == nil`; a secretless client skips secret resolution, the env key
+and the `EnvSecretData` entry entirely, leaving `secretEnv` unset in the config. An empty
+client ID is `BuildFailed` (Dex refuses to start on one).
 
 ### Derived CORS origins (`spec.cors`)
 
 `DexStaticClientSpec.CORS` (bool, `json:"cors,omitempty"`) opts a client into
 contributing the origins of its own **https** `redirectURIs` to the
 installation's `web.allowedOrigins`. `deriveCORSOrigins` runs in `Build` over
-the spec-level clients; `assembleWebConfig` merges the result. Nothing lands in
+the spec-level objects of the rendered clients (a rejected client contributes nothing); `assembleWebConfig` merges the result. Nothing lands in
 the rendered `staticClients` entry — dex has no per-client CORS.
 
 Decisions (asked and settled, do not silently revert):

@@ -14,8 +14,10 @@ config, and why the render must be deterministic. Where each function lives is
 2. **`GenericChildReconciler[T, U]`** ([child_reconciler.go](../../internal/controller/child_reconciler.go)) —
    one generic instance per child kind (16 connectors + `DexStaticClient`, registered by
    `SetupConnectorControllers` in [connector_controller.go](../../internal/controller/connector_controller.go)).
-   It only validates — the installation exists, the child's namespace is admitted — and maintains
-   the child's `Ready` condition. It does **not** build anything. Which allowlist applies depends
+   It only validates — the installation exists, the child's namespace is admitted, the installation
+   did not list it in `status.rejectedChildren` — and maintains the child's `Ready` condition and,
+   for a `DexStaticClient`, its `TrustedPeersDropped` condition from the installation's
+   `status.droppedTrustedPeers`. It does **not** build anything. Which allowlist applies depends
    on the kind: `DexStaticClient` uses `allowedNamespaces`, every connector kind the effective
    connector list (`connectorNamespaces`: `allowedConnectorNamespaces`, or only the installation's
    own namespace when omitted). Both live as pure functions in
@@ -38,9 +40,11 @@ Config regeneration always goes through the installation reconciler, via watches
 The reverse direction exists for child status only: every `GenericChildReconciler` also watches
 `DexInstallation` and enqueues the children of its kind that reference it
 (`mapInstallationToChildren`, through the `InstallationRefIndexField` index). Without it, a child
-keeps a stale `Ready` condition after an allowlist edit until its own next event. The watch passes
-only generation changes (spec edits), creates and deletes (`GenerationChangedPredicate`), so the
-installation's status updates do not fan out to all children. The index is registered by
+keeps a stale condition after an allowlist edit, or after the installation stops rejecting it,
+until its own next event. The watch passes generation changes (spec edits), changes of
+`status.rejectedChildren` or `status.droppedTrustedPeers` (`childReportChangedPredicate`), creates
+and deletes (`predicate.Or` with `GenerationChangedPredicate`); the installation's other status
+updates — the counts, the conditions — do not fan out to all children. The index is registered by
 `DexInstallationReconciler.SetupWithManager`, so that controller must be set up first —
 [cmd/main.go](../../cmd/main.go) and the integration suite do.
 
@@ -55,16 +59,29 @@ Reconcile
  │    │    static clients: allowedNamespaces   (empty = deny all, "*" = all)
  │    └─ sortByNamespaceName: deterministic order (see below)
  ├─ builder.Build(Input)                         (internal/builder)
- │    └─ resolves SecretKeyRefs via the injected SecretResolver
+ │    ├─ resolves SecretKeyRefs via the injected SecretResolver
+ │    └─ claims, contest, skip-and-report, trusted-peer filter (builder.md)
+ │         ErrNoConnector → report the rejections, keep the last config, Ready=False
  ├─ applySecret(configSecretName, config.yaml)   (secret.go, compared as parsed YAML)
  ├─ applySecret(envSecretName, env map)          (compared byte-wise)
  ├─ if the config changed → triggerRolloutRestart (rollout.go)
- └─ status: connectorCount, staticClientCount, Ready condition (status.go)
+ ├─ status: counts, rejectedChildren, droppedTrustedPeers,
+ │          ChildrenRejected, TrustedPeersDropped (status.go setChildReport)
+ ├─ recordClientIDs: patch status.clientID of every collected client whose ID changed
+ └─ Ready condition, one status update if anything changed
 ```
 
 Both Secrets are written into the installation's own namespace with the labels
 `app.kubernetes.io/managed-by: dex-operator` and `dex.gtrfc.com/installation: <name>`, and without
-an owner reference. A build error lands on the installation's `Ready` condition.
+an owner reference. A build error lands on the installation's `Ready` condition; a child left out
+of the render does not — it lands in `status.rejectedChildren` and on the child.
+
+`recordClientIDs` runs after both Secrets are written and patches only `status.clientID` (a JSON
+merge patch without resource version, so it does not conflict). A failed patch fails the
+reconcile; the retry renders the same output and repeats only the patch. Each patch is an event on
+the client, which re-reconciles the installation once more with an unchanged result. The child
+reconciler writes the status it read, `status.clientID` included; when it races the patch, its
+update conflicts, is dropped, and the patch's own event reconciles the child again.
 
 ## Determinism matters
 
@@ -84,10 +101,12 @@ and with `rolloutRestart` a Dex restart.
 
 ## Child errors
 
-Child resources with user-caused problems — a missing installation, a forbidden namespace —
-return a `configError`, which is reported through the `Ready` condition and requeued after five
-minutes (`configRequeueInterval`) instead of entering exponential backoff
-([child_reconciler.go](../../internal/controller/child_reconciler.go)).
+Child resources with user-caused problems — a missing installation, a forbidden namespace, a
+rejection by the installation — return a `configError`, which is reported through the `Ready`
+condition and requeued after five minutes (`configRequeueInterval`) instead of entering
+exponential backoff ([child_reconciler.go](../../internal/controller/child_reconciler.go)). A
+rejection carries the installation's reason (`DuplicateID`, `BuildFailed`) into the condition
+(`newRejectionError`); every other `configError` reports `ReconcileError`.
 
 ## The ChildObject interface
 

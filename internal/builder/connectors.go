@@ -21,54 +21,98 @@ import (
 	"encoding/base64"
 	"fmt"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	dexv1 "github.com/guided-traffic/dex-operator/api/v1"
 )
 
-// buildAllConnectors iterates over every connector type in cs, converts each
-// to a ConnectorEntry and returns the combined slice together with any
-// MountedSecret entries for TLS-certificate files.
+// connectorBuildFunc builds the config entry of one connector of type T.
+type connectorBuildFunc[T any] func(
+	ctx context.Context,
+	c *T,
+	sr SecretResolver,
+	env *childEnv,
+) (ConnectorEntry, []MountedSecret, error)
+
+// connectorUnits returns one render unit per connector in render order:
+// LDAP, SAML, AuthProxy, then the OAuth-style kinds (see
+// [oauthConnectorUnits]), each kind in input order.  Every unit claims the
+// connector's effective ID; claiming needs no Secret.
 //
 // Local connectors are intentionally excluded: their presence is reflected by
 // setting EnablePasswordDB in the DexConfig (see [assembleDexConfig]).
-func buildAllConnectors(
-	ctx context.Context,
-	cs ConnectorSet,
+func connectorUnits(cs ConnectorSet, sr SecretResolver) []*renderUnit {
+	var units []*renderUnit
+	units = addConnectorUnits(units, "DexLDAPConnector", cs.LDAP,
+		func(c *dexv1.DexLDAPConnector) string { return c.Spec.ID }, buildLDAPConnector, sr)
+	units = addConnectorUnits(units, "DexSAMLConnector", cs.SAML,
+		func(c *dexv1.DexSAMLConnector) string { return c.Spec.ID },
+		func(_ context.Context, c *dexv1.DexSAMLConnector, _ SecretResolver, _ *childEnv) (ConnectorEntry, []MountedSecret, error) {
+			return buildSAMLConnector(c)
+		}, sr)
+	units = addConnectorUnits(units, "DexAuthProxyConnector", cs.AuthProxy,
+		func(c *dexv1.DexAuthProxyConnector) string { return c.Spec.ID },
+		func(_ context.Context, c *dexv1.DexAuthProxyConnector, _ SecretResolver, _ *childEnv) (ConnectorEntry, []MountedSecret, error) {
+			return buildAuthProxyConnector(c), nil, nil
+		}, sr)
+	return oauthConnectorUnits(units, cs, sr)
+}
+
+// addConnectorUnits appends one render unit per item to units.  specID
+// returns the item's spec.id, build builds its entry.
+func addConnectorUnits[T any, PT interface {
+	*T
+	metav1.Object
+}](
+	units []*renderUnit,
+	kind string,
+	items []T,
+	specID func(*T) string,
+	build connectorBuildFunc[T],
 	sr SecretResolver,
-	envs map[string][]byte,
-) ([]ConnectorEntry, []MountedSecret, error) {
-	entries := make([]ConnectorEntry, 0, len(cs.LDAP)+len(cs.SAML)+len(cs.AuthProxy))
+) []*renderUnit {
+	for i := range items {
+		c := &items[i]
+		obj := PT(c)
+		units = append(units, &renderUnit{
+			kind:      kind,
+			namespace: obj.GetNamespace(),
+			name:      obj.GetName(),
+			created:   obj.GetCreationTimestamp(),
+			id:        connectorID(obj.GetName(), specID(c)),
+			resolved:  true,
+			build: func(ctx context.Context, env *childEnv) (unitResult, error) {
+				e, m, err := build(ctx, c, sr, env)
+				return unitResult{connector: e, mounts: m}, err
+			},
+		})
+	}
+	return units
+}
+
+// reserveLocal marks every connector that claims Dex's own password
+// database ID.  Called only while a DexLocalConnector renders.
+func reserveLocal(units []*renderUnit) {
+	for _, u := range units {
+		if u.id == localConnectorID {
+			u.reserved = true
+		}
+	}
+}
+
+// renderedConnectors returns the entries and mounted files of the rendered
+// connectors in render order.
+func renderedConnectors(units []*renderUnit) ([]ConnectorEntry, []MountedSecret) {
+	entries := make([]ConnectorEntry, 0, len(units))
 	var mounts []MountedSecret
-
-	for i := range cs.LDAP {
-		e, m, err := buildLDAPConnector(ctx, &cs.LDAP[i], sr, envs)
-		if err != nil {
-			return nil, nil, fmt.Errorf("LDAP connector %q: %w", cs.LDAP[i].Name, err)
+	for _, u := range units {
+		if !u.rendered {
+			continue
 		}
-		entries = append(entries, e)
-		mounts = append(mounts, m...)
+		entries = append(entries, u.result.connector)
+		mounts = append(mounts, u.result.mounts...)
 	}
-
-	for i := range cs.SAML {
-		e, m, err := buildSAMLConnector(&cs.SAML[i])
-		if err != nil {
-			return nil, nil, fmt.Errorf("SAML connector %q: %w", cs.SAML[i].Name, err)
-		}
-		entries = append(entries, e)
-		mounts = append(mounts, m...)
-	}
-
-	for i := range cs.AuthProxy {
-		entries = append(entries, buildAuthProxyConnector(&cs.AuthProxy[i]))
-	}
-
-	oauthEntries, oauthMounts, err := buildAllOAuthConnectors(ctx, cs, sr, envs)
-	if err != nil {
-		return nil, nil, err
-	}
-	entries = append(entries, oauthEntries...)
-	mounts = append(mounts, oauthMounts...)
-
-	return entries, mounts, nil
+	return entries, mounts
 }
 
 // ── LDAP ─────────────────────────────────────────────────────────────────────
@@ -77,7 +121,7 @@ func buildLDAPConnector(
 	ctx context.Context,
 	c *dexv1.DexLDAPConnector,
 	sr SecretResolver,
-	envs map[string][]byte,
+	env *childEnv,
 ) (ConnectorEntry, []MountedSecret, error) {
 	id := connectorID(c.Name, c.Spec.ID)
 	cfg := map[string]any{cfgKeyHost: c.Spec.Host}
@@ -85,7 +129,7 @@ func buildLDAPConnector(
 
 	applyLDAPBoolFlags(cfg, c.Spec)
 
-	if err := applyLDAPTLS(ctx, cfg, c.Spec, id, c.Namespace, sr, &mounts, envs); err != nil {
+	if err := applyLDAPTLS(ctx, cfg, c.Spec, id, c.Namespace, sr, &mounts); err != nil {
 		return ConnectorEntry{}, nil, err
 	}
 
@@ -94,8 +138,7 @@ func buildLDAPConnector(
 	}
 
 	if c.Spec.BindPWRef != nil {
-		envKey := connectorEnvKey("ldap", id, "BIND_PW")
-		ref, err := resolveEnvSecret(ctx, c.Namespace, *c.Spec.BindPWRef, envKey, sr, envs)
+		ref, err := resolveEnvSecret(ctx, c.Namespace, *c.Spec.BindPWRef, connectorEnvBase("ldap", id), "BIND_PW", sr, env)
 		if err != nil {
 			return ConnectorEntry{}, nil, fmt.Errorf("bindPW: %w", err)
 		}
@@ -134,7 +177,6 @@ func applyLDAPTLS(
 	id, namespace string,
 	sr SecretResolver,
 	mounts *[]MountedSecret,
-	envs map[string][]byte,
 ) error {
 	if spec.RootCARef != nil {
 		val, err := resolveSecret(ctx, namespace, *spec.RootCARef, sr)
@@ -152,7 +194,6 @@ func applyLDAPTLS(
 		cfg["clientKey"] = mountCertFile(*spec.ClientKeyRef, namespace, id, "client-key", mounts)
 	}
 
-	_ = envs // unused for LDAP TLS, reserved for future use
 	return nil
 }
 

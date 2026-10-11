@@ -23,6 +23,9 @@ spec:
     - jsonPath: .spec.displayName
       name: Display Name
       type: string
+    - jsonPath: .status.clientID
+      name: Client ID
+      type: string
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: Ready
       type: string
@@ -134,8 +137,13 @@ spec:
                 - name
                 type: object
               trustedPeers:
-                description: TrustedPeers lists other client IDs whose ID tokens this
-                  client trusts.
+                description: |-
+                  TrustedPeers lists the client IDs that may obtain ID tokens with this
+                  client's ID as audience (cross-client trust). Only entries whose ID is
+                  held by a DexStaticClient in this client's own namespace are rendered;
+                  every other entry is left out of the config and reported in
+                  status.droppedTrustedPeers of the installation and in this client's
+                  TrustedPeersDropped condition.
                 items:
                   type: string
                 type: array
@@ -154,6 +162,14 @@ spec:
           status:
             description: DexStaticClientStatus defines the observed state of DexStaticClient.
             properties:
+              clientID:
+                description: |-
+                  ClientID is the client ID the operator last resolved for this client,
+                  from spec.clientID or from the Secret, whether or not the client
+                  rendered. While the Secret cannot be resolved, the client keeps
+                  claiming this ID, so a gap in the Secret does not free the ID for
+                  another namespace.
+                type: string
               conditions:
                 description: Conditions represent the latest available observations
                   of the object's state.

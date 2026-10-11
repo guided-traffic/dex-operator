@@ -1,18 +1,46 @@
-# Relying parties: confidential and public static clients, and their CORS origins
+# Relying parties: confidential and public static clients, their trusted peers and CORS origins
 
 What a `DexStaticClient` registers, what protects a confidential client and what protects a public
-one, and what `cors: true` adds to the installation. Which namespaces may register clients at all
-is [tenancy.md](tenancy.md); how the client secret reaches Dex is
-[secret-flow.md](secret-flow.md). The decisions are
-[ADR 0004](../adr/0004-a-static-client-is-confidential-through-a-secret-or-public-through-an-inline-id-validated-by-cel.md)
-and [ADR 0005](../adr/0005-a-static-client-opts-in-to-derive-its-cors-origins-from-its-own-https-redirect-uris.md).
+one, whom a client may trust with its audience, and what `cors: true` adds to the installation.
+Which namespaces may register clients at all, and which client holds an ID several claim, is
+[tenancy.md](tenancy.md); how the client secret reaches Dex is [secret-flow.md](secret-flow.md).
+The decisions are
+[ADR 0004](../adr/0004-a-static-client-is-confidential-through-a-secret-or-public-through-an-inline-id-validated-by-cel.md),
+[ADR 0005](../adr/0005-a-static-client-opts-in-to-derive-its-cors-origins-from-its-own-https-redirect-uris.md)
+and [ADR 0009](../adr/0009-a-client-trusts-only-peers-held-in-its-own-namespace.md).
 
 ## What a registration is
 
 A static client brings its client ID, its `redirectURIs`, its `trustedPeers` and, when
 confidential, its secret. The redirect URIs are the security-critical part: an authorization code
 for a user who logs in to that client goes to them. Who may set them is decided by
-`allowedNamespaces` and by RBAC on `dexstaticclients` ([tenancy.md](tenancy.md)).
+`allowedNamespaces` and by RBAC on `dexstaticclients` ([tenancy.md](tenancy.md)). The client ID is
+the key of the registration: it renders for one client of the installation only, and a client
+outside the installation's namespace can never take it over from another
+([tenancy.md](tenancy.md#one-child-per-id)).
+
+## Trusted peers: who may obtain tokens for this client's audience
+
+`trustedPeers` on a client B lists client IDs. A client A that requests the scope
+`audience:server:client_id:B` gets an ID token with audience B when B's `trustedPeers` names A's
+ID (`validateCrossClientTrust`, `server/oauth2.go`, dex v2.44.0). Every resource server that
+accepts audience B accepts that token. The trust is granted to an **ID**, not to an object: Dex
+trusts whoever holds the listed ID.
+
+The operator therefore renders a `trustedPeers` entry only when the ID is held by a static client
+in the trusting client's **own namespace**
+([internal/builder/clients.go](../../internal/builder/clients.go) `filterTrustedPeers`). An ID is
+held by the one client the contest rule leaves it to — the one that renders, or the sole claimant
+whose build failed, so a gap in a peer's Secret does not rewrite the trusting client's entry. An
+entry naming an ID held in another namespace, contested, or held by nobody — a peer that is not
+deployed yet, or was removed — is left out of the config, listed in the installation's
+`status.droppedTrustedPeers`, and shown on the trusting client as `TrustedPeersDropped=True` with
+the peer IDs, never the namespace of their holder. It comes back on the render in which a client
+of that namespace holds the ID; holders and the filter always come from the same render. The rule
+holds for the installation's namespace too: a platform client trusts only platform peers.
+
+Within one namespace, RBAC on `dexstaticclients` governs both ends of the trust, as it governs
+both registrations. A client never needs to list itself: Dex grants a client its own audience.
 
 ## Confidential and public clients
 

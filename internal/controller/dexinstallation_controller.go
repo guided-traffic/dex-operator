@@ -18,11 +18,12 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -89,6 +90,11 @@ func (r *DexInstallationReconciler) reconcileInstallation(
 		StaticClients: clients,
 		Secrets:       r.makeSecretResolver(),
 	})
+	if errors.Is(err, intbuilder.ErrNoConnector) {
+		// The connector guard keeps the last written config, but the
+		// children that caused it are reported all the same.
+		setChildReport(&installation.Status, installation.Generation, out)
+	}
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("building dex config: %w", err)
 	}
@@ -129,9 +135,39 @@ func (r *DexInstallationReconciler) reconcileInstallation(
 		}
 	}
 
-	installation.Status.ConnectorCount = countConnectors(connectors)
-	installation.Status.StaticClientCount = len(clients)
+	installation.Status.ConnectorCount = out.ConnectorCount
+	installation.Status.StaticClientCount = out.StaticClientCount
+	setChildReport(&installation.Status, installation.Generation, out)
+
+	if err := r.recordClientIDs(ctx, clients, out.ClientIDs); err != nil {
+		return ctrl.Result{}, err
+	}
 	return ctrl.Result{}, nil
+}
+
+// recordClientIDs patches status.clientID on every collected client whose
+// resolved ID differs from it.  While a client's Secret cannot be resolved,
+// the next render takes the client's claim from this field.  The config and
+// env Secrets are written by then: a failed patch fails the reconcile, and
+// the retry renders the same output and repeats only the patch.
+func (r *DexInstallationReconciler) recordClientIDs(
+	ctx context.Context,
+	clients []dexv1.DexStaticClient,
+	ids map[types.NamespacedName]string,
+) error {
+	for i := range clients {
+		c := &clients[i]
+		id, ok := ids[client.ObjectKeyFromObject(c)]
+		if !ok || id == c.Status.ClientID {
+			continue
+		}
+		patch := client.MergeFrom(c.DeepCopy())
+		c.Status.ClientID = id
+		if err := r.Status().Patch(ctx, c, patch); err != nil {
+			return fmt.Errorf("recording status.clientID of DexStaticClient %s/%s: %w", c.Namespace, c.Name, err)
+		}
+	}
+	return nil
 }
 
 // makeSecretResolver returns a [intbuilder.SecretResolver] backed by the API server.
@@ -139,7 +175,7 @@ func (r *DexInstallationReconciler) makeSecretResolver() intbuilder.SecretResolv
 	return func(ctx context.Context, namespace string, ref dexv1.SecretKeyRef) (string, error) {
 		var secret corev1.Secret
 		if err := r.Get(ctx, types.NamespacedName{Namespace: namespace, Name: ref.Name}, &secret); err != nil {
-			if errors.IsNotFound(err) {
+			if apierrors.IsNotFound(err) {
 				return "", fmt.Errorf("secret %s/%s not found", namespace, ref.Name)
 			}
 			return "", err
@@ -150,16 +186,6 @@ func (r *DexInstallationReconciler) makeSecretResolver() intbuilder.SecretResolv
 		}
 		return string(val), nil
 	}
-}
-
-// countConnectors returns the total number of connectors across all types.
-func countConnectors(cs intbuilder.ConnectorSet) int {
-	return len(cs.LDAP) + len(cs.GitHub) + len(cs.SAML) +
-		len(cs.GitLab) + len(cs.OIDC) + len(cs.OAuth2) +
-		len(cs.Google) + len(cs.LinkedIn) + len(cs.Microsoft) +
-		len(cs.AuthProxy) + len(cs.Bitbucket) + len(cs.Local) +
-		len(cs.OpenShift) + len(cs.AtlassianCrowd) + len(cs.Gitea) +
-		len(cs.Keystone)
 }
 
 // mapChildToInstallation is a handler.MapFunc that maps any child object that

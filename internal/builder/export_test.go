@@ -21,3 +21,16 @@ var ExportedSanitizeEnvKey = sanitizeEnvKey
 
 // ExportedConnectorID exposes [connectorID] for white-box testing.
 var ExportedConnectorID = connectorID
+
+// ExportedChildHash exposes [childHash] for white-box testing.
+var ExportedChildHash = childHash
+
+// ExportedContest exposes [contest] for white-box testing: claim i is the ID
+// ids[i] claimed from namespaces[i].
+func ExportedContest(namespaces, ids []string, home string) []bool {
+	claims := make([]claim, len(ids))
+	for i := range ids {
+		claims[i] = claim{namespace: namespaces[i], id: ids[i]}
+	}
+	return contest(claims, home)
+}

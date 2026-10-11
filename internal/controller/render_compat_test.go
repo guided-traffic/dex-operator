@@ -19,7 +19,11 @@ package controller_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -195,5 +199,62 @@ func TestReconcile_OwnNamespaceConnectorsRenderUnchanged(t *testing.T) {
 				t.Errorf("ConnectorCount = %d; want 4", updated.Status.ConnectorCount)
 			}
 		})
+	}
+}
+
+// TestReconcile_RenderMatchesV230 guards the upgrade promise of the claim
+// rules: an installation without duplicate IDs, without failing children and
+// with trustedPeers held in the trusting client's own namespace renders the
+// config and env Secret byte-identical to v2.3.0, so the upgrade causes no
+// config diff and no dex rollout.
+func TestReconcile_RenderMatchesV230(t *testing.T) {
+	r, c := newReconciler(t, compatFixture()...)
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Namespace: "dex", Name: "main"},
+	}); err != nil {
+		t.Fatalf("Reconcile returned error: %v", err)
+	}
+
+	wantConfig, err := os.ReadFile(filepath.Join("testdata", "render-compat-v2.3.0", "config.yaml"))
+	if err != nil {
+		t.Fatalf("reading golden config: %v", err)
+	}
+	wantEnvJSON, err := os.ReadFile(filepath.Join("testdata", "render-compat-v2.3.0", "env.json"))
+	if err != nil {
+		t.Fatalf("reading golden env: %v", err)
+	}
+	var wantEnv map[string]string
+	if err := json.Unmarshal(wantEnvJSON, &wantEnv); err != nil {
+		t.Fatalf("parsing golden env: %v", err)
+	}
+
+	var cfg, env corev1.Secret
+	if err := c.Get(context.Background(), types.NamespacedName{Namespace: "dex", Name: "dex-config"}, &cfg); err != nil {
+		t.Fatalf("config secret not found: %v", err)
+	}
+	if err := c.Get(context.Background(), types.NamespacedName{Namespace: "dex", Name: "dex-env"}, &env); err != nil {
+		t.Fatalf("env secret not found: %v", err)
+	}
+
+	if got := cfg.Data["config.yaml"]; !bytes.Equal(got, wantConfig) {
+		t.Errorf("config differs from v2.3.0\n--- got ---\n%s\n--- want ---\n%s", got, wantConfig)
+	}
+	gotEnv := make(map[string]string, len(env.Data))
+	for k, v := range env.Data {
+		gotEnv[k] = string(v)
+	}
+	if !reflect.DeepEqual(gotEnv, wantEnv) {
+		t.Errorf("env differs from v2.3.0\n got: %v\nwant: %v", gotEnv, wantEnv)
+	}
+
+	var inst dexv1.DexInstallation
+	if err := c.Get(context.Background(), types.NamespacedName{Namespace: "dex", Name: "main"}, &inst); err != nil {
+		t.Fatalf("fetching installation: %v", err)
+	}
+	if len(inst.Status.RejectedChildren) != 0 || len(inst.Status.DroppedTrustedPeers) != 0 {
+		t.Errorf("rejected = %v, dropped = %v; want none", inst.Status.RejectedChildren, inst.Status.DroppedTrustedPeers)
+	}
+	if inst.Status.ConnectorCount != 5 || inst.Status.StaticClientCount != 5 {
+		t.Errorf("counts = %d connectors, %d clients; want 5 and 5", inst.Status.ConnectorCount, inst.Status.StaticClientCount)
 	}
 }

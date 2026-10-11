@@ -44,9 +44,6 @@ var SecretDataEqual = secretDataEqual
 // YamlSecretDataEqual exposes [yamlSecretDataEqual] for white-box testing.
 var YamlSecretDataEqual = yamlSecretDataEqual
 
-// CountConnectors exposes [countConnectors] for white-box testing.
-var CountConnectors = countConnectors
-
 // IsConfigError exposes [isConfigError] for white-box testing.
 var IsConfigError = isConfigError
 
@@ -88,4 +85,10 @@ func (r *GenericChildReconciler[T, U]) MapInstallationToChildren(ctx context.Con
 		return nil, err
 	}
 	return r.mapInstallationToChildren(listGVK)(ctx, obj), nil
+}
+
+// ChildReportChangedPredicate exposes [childReportChangedPredicate] for
+// white-box testing.
+func ChildReportChangedPredicate() predicate.Predicate {
+	return childReportChangedPredicate()
 }

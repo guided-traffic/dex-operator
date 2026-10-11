@@ -40,9 +40,12 @@ mistake by its author is enough for an outsider ([H-7](#h-7)).
 ## The local connector is an installation-wide switch
 
 A `DexLocalConnector` renders no connector entry. Its presence only sets `enablePasswordDB: true`
-([internal/builder/connectors.go](../../internal/builder/connectors.go) `buildAllConnectors`,
+([internal/builder/connectors.go](../../internal/builder/connectors.go) `connectorUnits`,
 [builder.go](../../internal/builder/builder.go) `assembleDexConfig`), and Dex then registers a
-fixed connector with ID `local` and name `Email` for every client of the installation. The
+fixed connector with ID `local` and name `Email` for every client of the installation. While it
+does, a configured connector with the ID `local` is left out as `DuplicateID`
+(`reserveLocal`): Dex appends its password database after the configured connectors and would
+serve it instead ([tenancy.md](tenancy.md#one-child-per-id)). The
 operator renders no `staticPasswords`. Whoever creates the resource cannot create users with it;
 the risk lies in who can write password entries ([H-8](#h-8)).
 

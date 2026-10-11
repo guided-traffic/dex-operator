@@ -19,6 +19,7 @@ package builder_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -1171,23 +1172,14 @@ func TestConnectorID_Fallback(t *testing.T) {
 
 // ── Build: static client env var collision ────────────────────────────────────
 
+// TestBuild_StaticClient_EnvVarCollision covers two clients whose resource
+// names sanitize to the same env var key: "grafana" and "GRAFANA" both
+// produce GRAFANA_CLIENT_SECRET.  Neither is dropped: the one first in env
+// priority keeps the plain key, the other renders with its fallback key.
 func TestBuild_StaticClient_EnvVarCollision(t *testing.T) {
 	inst := minimalInstallation("ns")
 
-	// Two clients whose resource names sanitize to the same env var key:
-	// "grafana" and "GRAFANA" both produce GRAFANA_CLIENT_SECRET.
 	clients := []dexv1.DexStaticClient{
-		{
-			ObjectMeta: metav1.ObjectMeta{Name: "grafana", Namespace: "ns"},
-			Spec: dexv1.DexStaticClientSpec{
-				InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
-				SecretRef: &dexv1.StaticClientSecretRef{
-					Name: "grafana-oidc",
-				},
-				DisplayName:  "Grafana",
-				RedirectURIs: []string{"https://grafana.example.com/callback"},
-			},
-		},
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "GRAFANA", Namespace: "ns"},
 			Spec: dexv1.DexStaticClientSpec{
@@ -1199,6 +1191,17 @@ func TestBuild_StaticClient_EnvVarCollision(t *testing.T) {
 				RedirectURIs: []string{"https://grafana2.example.com/callback"},
 			},
 		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "grafana", Namespace: "ns"},
+			Spec: dexv1.DexStaticClientSpec{
+				InstallationRef: dexv1.InstallationRef{Name: "test", Namespace: "ns"},
+				SecretRef: &dexv1.StaticClientSecretRef{
+					Name: "grafana-oidc",
+				},
+				DisplayName:  "Grafana",
+				RedirectURIs: []string{"https://grafana.example.com/callback"},
+			},
+		},
 	}
 
 	secrets := map[string]string{
@@ -1208,20 +1211,31 @@ func TestBuild_StaticClient_EnvVarCollision(t *testing.T) {
 		"ns/grafana-oidc-2[client-secret]": "secret2",
 	}
 
-	_, err := builder.Build(context.Background(), builder.Input{
+	out, err := builder.Build(context.Background(), builder.Input{
 		Installation:  inst,
 		StaticClients: clients,
 		Secrets:       mockResolver(secrets),
 	})
-	if err == nil {
-		t.Fatal("expected collision error, got nil")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(out.Rejected) != 0 {
+		t.Fatalf("Rejected = %v; want none", out.Rejected)
 	}
 
-	if !contains(err.Error(), "env var name collision") {
-		t.Errorf("error should mention collision, got: %v", err)
+	// Equal ages and namespaces: kind, namespace, then name decide, and
+	// "GRAFANA" sorts before "grafana".
+	fallback := "GRAFANA_" + strings.ToUpper(builder.ExportedChildHash("DexStaticClient", "ns", "grafana")) + "_CLIENT_SECRET"
+	if got := string(out.EnvSecretData["GRAFANA_CLIENT_SECRET"]); got != "secret2" {
+		t.Errorf("GRAFANA_CLIENT_SECRET = %q; want secret2", got)
 	}
-	if !contains(err.Error(), "GRAFANA_CLIENT_SECRET") {
-		t.Errorf("error should mention the env var name, got: %v", err)
+	if got := string(out.EnvSecretData[fallback]); got != "secret1" {
+		t.Errorf("%s = %q; want secret1", fallback, got)
+	}
+
+	scs := parseYAML(t, out.ConfigYAML)["staticClients"].([]any)
+	if got := scs[1].(map[string]any)["secretEnv"]; got != fallback {
+		t.Errorf("grafana secretEnv = %v; want %s", got, fallback)
 	}
 }
 
@@ -1282,17 +1296,4 @@ func TestBuild_StaticClient_NoCollision(t *testing.T) {
 	if sc1["secretEnv"] != "ARGOCD_CLIENT_SECRET" {
 		t.Errorf("client 1 secretEnv = %v, want ARGOCD_CLIENT_SECRET", sc1["secretEnv"])
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsAt(s, substr))
-}
-
-func containsAt(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

@@ -30,8 +30,8 @@ may omit `redirectURIs` and gets Dex's loopback, OOB and device-flow defaults.
 plus a secret); the builder then behaves as for a confidential client and sets `public: true`.
 
 **D4 — A secretless client leaves no trace in the env Secret.** With `SecretRef == nil`,
-`buildOneStaticClient` skips secret resolution, the env-key collision check and the
-`EnvSecretData` entry, and leaves `secretEnv` unset
+`resolveClientID` takes the inline ID and `buildOneStaticClient` skips secret resolution, the env
+key assignment and the `EnvSecretData` entry, and leaves `secretEnv` unset
 ([internal/builder/clients.go](../../internal/builder/clients.go)).
 
 **D5 — The conditional rules are CEL on the spec; there is no webhook.**

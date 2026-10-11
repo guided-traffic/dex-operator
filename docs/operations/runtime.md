@@ -65,17 +65,38 @@ the connector is used, so check Dex's log after adding a file-based connector. T
 ## Reading the conditions
 
 - **`DexInstallation` `Ready`** — `True` when the last render was built and both Secrets were
-  written. `False` carries the build error: a referenced Secret or key that does not exist, or two
-  static clients whose names produce the same env var.
+  written, even if some children were left out of it. `False` carries the error that stopped the
+  render: a storage credential that cannot be resolved, or the connector guard — connectors were
+  collected, none of them renders and no `DexLocalConnector` keeps Dex startable, so the last
+  written config stays; the message names every connector and why it was left out.
   `status.connectorCount` and `status.staticClientCount` count what was rendered.
-- **A child's `Ready`** — says only whether its installation exists and admits its namespace. The
-  messages name the reason: `referenced DexInstallation <ns>/<name> not found`,
+- **`DexInstallation` `ChildrenRejected`** — `True` while `status.rejectedChildren` lists children
+  that pass the allowlists but are not in the config: `DuplicateID` when their client or connector
+  ID is claimed by more than one child (or is `local` while a `DexLocalConnector` renders),
+  `BuildFailed` when their own build failed — a missing Secret or key, an empty client ID, both env
+  var keys taken. Find every claimant of a contested ID by its `id` in that list. Which claimant
+  wins is the README's `installationRef` rule.
+- **`DexInstallation` `TrustedPeersDropped`** — `True` while `status.droppedTrustedPeers` lists
+  `trustedPeers` entries left out because no static client in the trusting client's namespace
+  holds the peer ID.
+- **A child's `Ready`** — `False` when its installation does not exist, does not admit its
+  namespace, or left it out of the rendered config. The messages name the reason:
+  `referenced DexInstallation <ns>/<name> not found`,
   `namespace "<ns>" is not in DexInstallation <ns>/<name> allowedNamespaces` for a static client,
   `... allowedConnectorNamespaces` for a connector, with `(omitted: only "<ns>" is allowed)` when
-  that field is not set. Such a child is checked again every five minutes and whenever the
-  installation's spec changes. A build error is reported on the installation, not on the child.
+  that field is not set; with reason `DuplicateID`
+  `client ID "<id>" is claimed by more than one DexStaticClient of DexInstallation <ns>/<name>`
+  (for a connector `connector ID "<id>" is claimed by more than one connector ...`); with reason
+  `BuildFailed` the child's own build error. Such a child is checked again every five minutes and
+  whenever the installation's spec, its rejected children or its dropped peers change.
+- **A static client's `TrustedPeersDropped`** — `True` with the peer IDs of its own
+  `trustedPeers` that were left out; the client itself renders and stays `Ready=True`.
+- **A static client's `status.clientID`** (print column `Client ID`) — the ID last resolved for
+  it, written by the installation reconciler. While the client's Secret cannot be resolved it keeps
+  claiming that ID, so the gap frees nothing for another namespace.
 
-The operator records no Kubernetes events; the conditions and the operator's log are the record.
+The operator records no Kubernetes events; the conditions, the installation's status lists and the
+operator's log are the record.
 
 ## Secrets left behind
 

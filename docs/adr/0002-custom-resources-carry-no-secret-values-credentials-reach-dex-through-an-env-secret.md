@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted. Date: 2026-10-07, recording a design in force since the first release. D2's
+Accepted, amended 2026-10-07 (D3: a colliding env var name gets a fallback key instead of
+failing the build). Date: 2026-10-07, recording a design in force since the first release. D2's
 `secretEnv` for static clients since 1.0 (`fix(builder): use secretEnv instead of secret for
 static clients`, 2026-03-08).
 
@@ -36,11 +37,20 @@ static client ([internal/builder/envvar.go](../../internal/builder/envvar.go)). 
 attached to the Dex container with `envFrom` in the Dex chart's values, which the operator does
 not write.
 
-**D3 — The env var names are deterministic and collisions are refused.**
+**D3 — The env var names are deterministic, and a collision gets a fallback key.**
 `<TYPE>_<ID>_<FIELD>` for a connector, `<RESOURCE_NAME>_CLIENT_SECRET` for a static client,
 `STORAGE_<FIELD>` for storage, every name sanitized to upper case with every other character
-replaced by `_`. Two static clients whose names sanitize to the same key fail the build instead of
-overwriting each other's secret ([internal/builder/clients.go](../../internal/builder/clients.go)).
+replaced by `_`. Keys are assigned across storage, connectors and clients in one priority order —
+storage, then the installation's namespace, then the oldest object, then kind, namespace and name
+(`byEnvPriority`, [internal/builder/render.go](../../internal/builder/render.go)) — not in render
+order. A child whose plain key is already taken gets the fallback key
+`<BASE>_<HASH>_<FIELD>`, the hash being 8 hex characters of SHA-256 over kind/namespace/name
+(`childEnv.set`, [internal/builder/envvar.go](../../internal/builder/envvar.go)), and renders
+normally; only when the fallback key is taken as well is it left out as `BuildFailed`
+([ADR 0008](0008-an-id-renders-for-one-child-only-and-a-failing-child-is-left-out-instead-of-failing-the-render.md) D5).
+No two children ever share a key, across categories included. A key that collides with nothing is
+the plain key. *Superseded 2026-10-07:* two static clients whose names sanitized to the same key
+failed the build, and the check did not cover connectors or a client named like a connector's key.
 
 **D4 — Identifiers are inline.** A client ID, a host name, a base URL is not a secret and is
 rendered into the config. The LDAP root CA (`rootCARef`) is inlined as base64 `rootCAData`: a CA
@@ -68,9 +78,18 @@ person.
   mounts only Secrets of its own namespace, so that material has to be made available in the Dex
   namespace by whoever runs Dex.
 - Stale generated Secrets accumulate after a rename until a person removes them.
+- A fallback key is not predictable from the resource alone: it depends on who else holds the
+  plain key. When the plain key's holder goes away, the child moves back to the plain key — one
+  config change and, with `rolloutRestart`, one Dex restart.
 
 ## Alternatives Considered
 
+- **Refuse a collision** (the rule until 2026-10-07). Lets one namespace block a name for every
+  later one, and a connector knock out a client by moving its mutable `spec.id` onto the client's
+  key. Lost.
+- **Namespaced keys for everybody** (`<NAMESPACE>_<NAME>_CLIENT_SECRET`). Renames every client key,
+  so every installation rolls out once on upgrade, and sanitizing still folds some pairs together.
+  Lost.
 - **Inline credentials in `config.yaml`.** One Secret instead of two, but every `kubectl get` and
   every diff of the config shows them. Lost.
 - **A namespace field on `SecretKeyRef`.** Lets a resource point at a Secret elsewhere, and so

@@ -10,14 +10,15 @@ The tree, annotated. What each file of the Go packages is responsible for is
 ├── api/v1/                          # CRD types, API group dex.gtrfc.com/v1
 │   ├── groupversion_info.go         # GroupVersion, SchemeBuilder
 │   ├── common_types.go              # InstallationRef, SecretKeyRef, CommonStatus, condition types
-│   ├── dexinstallation_types.go     # DexInstallation + storage/web/grpc/logger/expiry/oauth2/frontend specs, both allowlists
-│   ├── dexstaticclient_types.go     # DexStaticClient + its CEL rules
+│   ├── dexinstallation_types.go     # DexInstallation + storage/web/grpc/logger/expiry/oauth2/frontend specs, both allowlists, rejected children
+│   ├── dexstaticclient_types.go     # DexStaticClient + its CEL rules, status.clientID
 │   ├── dex<type>connector_types.go  # one file per connector CRD (16)
 │   ├── connector_helpers.go         # ChildObject implementations for every child CRD
 │   └── zz_generated.deepcopy.go     # generated — never edit, run `make generate-all`
 ├── internal/
 │   ├── builder/                     # pure config assembly: custom resources → config.yaml + env data
 │   └── controller/                  # reconcilers, collection, Secret writing, watches, RBAC markers
+│       └── testdata/                # golden renders of earlier releases for render_compat_test.go
 ├── config/                          # kustomize deployment, used by `make install`/`make deploy`
 │   ├── crd/bases/                   # generated CRD manifests — the source of truth for every copy
 │   ├── rbac/                        # generated ClusterRole (role.yaml) + leader election + bindings

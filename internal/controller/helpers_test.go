@@ -25,7 +25,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	dexv1 "github.com/guided-traffic/dex-operator/api/v1"
-	"github.com/guided-traffic/dex-operator/internal/builder"
 	"github.com/guided-traffic/dex-operator/internal/controller"
 )
 
@@ -208,44 +207,6 @@ func TestIsConfigError(t *testing.T) {
 			got := controller.IsConfigError(tc.err)
 			if got != tc.want {
 				t.Errorf("IsConfigError() = %v; want %v", got, tc.want)
-			}
-		})
-	}
-}
-
-// ── countConnectors ───────────────────────────────────────────────────────────
-
-func TestCountConnectors(t *testing.T) {
-	tests := []struct {
-		name string
-		cs   builder.ConnectorSet
-		want int
-	}{
-		{"empty", builder.ConnectorSet{}, 0},
-		{
-			"single LDAP",
-			builder.ConnectorSet{
-				LDAP: []dexv1.DexLDAPConnector{
-					{ObjectMeta: metav1.ObjectMeta{Name: "ldap-1"}},
-				},
-			},
-			1,
-		},
-		{
-			"mixed connectors",
-			builder.ConnectorSet{
-				LDAP:   []dexv1.DexLDAPConnector{{}, {}},
-				GitHub: []dexv1.DexGitHubConnector{{}},
-				OIDC:   []dexv1.DexOIDCConnector{{}, {}, {}},
-			},
-			6,
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := controller.CountConnectors(tc.cs)
-			if got != tc.want {
-				t.Errorf("CountConnectors() = %d; want %d", got, tc.want)
 			}
 		})
 	}
