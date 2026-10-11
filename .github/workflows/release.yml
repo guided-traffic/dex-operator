@@ -14,6 +14,14 @@ permissions:
   pull-requests: write  # For PR comments
   issues: write         # For issue comments
 
+# One pipeline per pull request and per branch. A new push to a pull request (a Renovate rebase,
+# for instance) cancels the run for the old head, whose checks no longer count. On main a running
+# pipeline finishes, and of the pushes queued behind it only the newest runs: semantic-release
+# publishes from the newest commit only and skips every run whose commit is behind main.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   GO_VERSION: '1.27.2'
   KUBERNETES_VERSION: '1.33.4'

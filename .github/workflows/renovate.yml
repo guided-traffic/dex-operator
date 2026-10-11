@@ -24,6 +24,12 @@ on:
 permissions:
   contents: read
 
+# One Renovate run at a time: two runs would rebase and push the same branches concurrently. A
+# trigger arriving while a run is in progress waits, and only the newest waiting one runs.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
   renovate:
     runs-on: self-hosted
