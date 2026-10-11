@@ -4,7 +4,8 @@
     "config:recommended",
     ":semanticCommits",
     ":automergeDigest",
-    ":automergeBranch"
+    ":automergeBranch",
+    "customManagers:makefileVersions"
   ],
   "schedule": ["at any time"],
   "timezone": "Europe/Berlin",
@@ -91,7 +92,17 @@
       ]
     },
     {
-      "description": "Go modules (indirect): disable major updates entirely",
+      "description": "Go modules (indirect): enable updates (the gomod manager extracts // indirect requirements disabled) so vulnerable transitive deps like golang.org/x/net get patched. This rule must not carry matchUpdateTypes or any other post-lookup matcher: it has to match before the lookup, where no update type exists yet, or the dependency is never looked up and gets no update at all. The next rule takes the majors back out.",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchDepTypes": [
+        "indirect"
+      ],
+      "enabled": true
+    },
+    {
+      "description": "Go modules (indirect): disable major updates. A transitive dep's next major is a different module path that parent deps (controller-runtime, k8s) still pin to the old major, so the bump can never build and Renovate would rebase it forever. Must stay after the enable rule above: the later rule wins.",
       "matchManagers": [
         "gomod"
       ],
@@ -195,21 +206,6 @@
       ]
     },
     {
-      "description": "Enable non-major updates for indirect Go module dependencies (off by default) so vulnerable transitive deps like golang.org/x/net get patched. Major updates stay disabled: a transitive dep's next major is a different module path that parent deps (controller-runtime, k8s) still pin to the old major, so the bump can never build and Renovate would rebase it forever.",
-      "matchManagers": [
-        "gomod"
-      ],
-      "matchDepTypes": [
-        "indirect"
-      ],
-      "matchUpdateTypes": [
-        "minor",
-        "patch",
-        "digest"
-      ],
-      "enabled": true
-    },
-    {
       "description": "Group golang.org/x/* modules (direct or indirect) with Go version updates so x-packages bump in lockstep with the toolchain",
       "matchPackageNames": [
         "golang",
@@ -217,6 +213,20 @@
       ],
       "groupName": "Go version",
       "groupSlug": "go-version"
+    },
+    {
+      "description": "Go analysers (golangci-lint, gosec; versions in the Makefile): group minor and patch updates with Go version updates and automerge them. Both read the compiler's export data through golang.org/x/tools, and a toolchain release can raise its version beyond what the pinned release decodes (Go 1.27.2 did). In one branch the toolchain update waits for, and picks up, the analyser release that reads it; in separate branches the analyser update would merge alone and leave the toolchain PR red on its stale run (rebaseWhen is conflicted). Majors (new config schema) stay separate and manual.",
+      "matchPackageNames": [
+        "github.com/golangci/golangci-lint/v2",
+        "github.com/securego/gosec/v2"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "Go version",
+      "groupSlug": "go-version",
+      "automerge": true
     },
     {
       "description": "conventional-changelog-conventionalcommits: block major updates. Preset v10 targets the new conventional-changelog API; @semantic-release/release-notes-generator (conventional-changelog-writer v8) silently drops all commits with it, producing empty release notes. Re-enable once release-notes-generator supports the v10 preset.",

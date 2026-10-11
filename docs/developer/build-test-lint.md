@@ -10,7 +10,7 @@ or the generators directly. `make help` lists every target. What each test tier 
 | `make generate-all` | controller-gen: DeepCopy, CRDs and RBAC, then sync the CRDs into the Helm chart. Run after **any** `api/v1` change and after any RBAC marker change |
 | `make manifests` / `make generate` | the two halves of `generate-all`: CRDs + RBAC + Helm sync / DeepCopy only |
 | `make helm-sync-crds` | copy `config/crd/bases/*.yaml` into `deploy/helm/dex-operator/files/crds/` |
-| `make lint` | `go vet`, `gofmt -l`, `golangci-lint` |
+| `make lint` | `go vet`, `gofmt -l`, `golangci-lint` at `GOLANGCI_LINT_VERSION` |
 | `make lint-fix` | `golangci-lint` with fixes |
 | `make cyclo` / `make cyclo-report` | the cyclomatic complexity gate — every function **< 15** — / the full report including tests |
 | `make test` | fmt + vet + every Go test under envtest, profile `cover.out` |
@@ -20,10 +20,18 @@ or the generators directly. `make help` lists every target. What each test tier 
 | `make test-e2e-helm` | meant for a Helm migration e2e test (`TestE2E_Migrate`, tags `e2e,e2e_helm`); that test does not exist, so the target runs nothing ([testing.md](testing.md#e2e-kind)) |
 | `make e2e-local` | the whole loop: Kind cluster, image build, kubectl image pull, both loaded into Kind, Helm install with [test/e2e/helm-values.yaml](../../test/e2e/helm-values.yaml), `test-e2e`, teardown |
 | `make kind-create` / `kind-delete` / `kind-load` | the Kind cluster `dex-operator-test` by hand |
-| `make gosec` / `make vuln` | security static analysis / govulncheck |
+| `make gosec` / `make vuln` | security static analysis (gosec at `GOSEC_VERSION`) / govulncheck (latest release) |
 | `make docker-build` / `make docker-buildx` | image build (runs `generate-all` first) / multi-arch build and push; `IMG=` overrides the tag |
 | `make install` / `make deploy` (and `uninstall` / `undeploy`) | the kustomize path in `config/` against the current kubeconfig — not the chart |
 | `make coverage-merge` / `make coverage-json` | merge the unit and integration profiles / write the README badge JSON |
+
+## Analyser versions
+
+golangci-lint and gosec run at the versions pinned in the [Makefile](../../Makefile)
+(`GOLANGCI_LINT_VERSION`, `GOSEC_VERSION`), locally and in CI alike — no binary already on the
+`PATH` is used. `make` installs each into `bin/` under a name that carries the version, so a version
+bump takes effect on the next run. Renovate keeps both versions current together with the Go
+toolchain ([ci-and-release.md](ci-and-release.md#renovate--renovateyml-renovatejson)).
 
 ## Coverage
 
