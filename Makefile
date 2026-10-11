@@ -53,12 +53,11 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: lint
-lint: ## Run linting.
+lint: golangci-lint ## Run linting.
 	@echo "Running static analysis..."
 	go vet ./...
 	$(GOFMT) -l .
-	@which golangci-lint > /dev/null || (echo "Installing golangci-lint..." && go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION))
-	golangci-lint run --timeout=5m
+	$(GOLANGCI_LINT) run --timeout=5m
 
 .PHONY: cyclo
 cyclo: ## Run cyclomatic complexity analysis.
@@ -213,10 +212,9 @@ coverage-json: ## Generate coverage badge JSON for shields.io.
 ##@ Security
 
 .PHONY: gosec
-gosec: ## Run gosec security scan.
+gosec: gosec-install ## Run gosec security scan.
 	@echo "Running gosec security scan..."
-	@which gosec > /dev/null || (echo "Installing gosec..." && go install github.com/securego/gosec/v2/cmd/gosec@v2.29.1-0.20261009120814-7b1b5cebe007)
-	GOFLAGS="-buildvcs=false" gosec ./...
+	GOFLAGS="-buildvcs=false" $(GOSEC) ./...
 
 .PHONY: vuln
 vuln: ## Check for vulnerabilities.
@@ -290,13 +288,22 @@ $(LOCALBIN):
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
-GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
+# The analysers carry their version in the file name: a version bump installs the new release
+# instead of reusing a binary that is already there.
+GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
+GOSEC ?= $(LOCALBIN)/gosec-$(GOSEC_VERSION)
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.3.0
 CONTROLLER_GEN_VERSION ?= v0.17.3
 ENVTEST_VERSION ?= release-0.19
+# golangci-lint and gosec read the compiler's export data, so a Go toolchain update can need a
+# newer release of both. Renovate updates the annotated versions (customManagers:makefileVersions)
+# in the "Go version" group, together with the toolchain.
+# renovate: datasource=go depName=github.com/golangci/golangci-lint/v2
 GOLANGCI_LINT_VERSION ?= v2.14.0
+# renovate: datasource=go depName=github.com/securego/gosec/v2
+GOSEC_VERSION ?= v2.29.1-0.20261009120814-7b1b5cebe007
 GOCYCLO_VERSION ?= v0.6.0
 
 # Cyclomatic complexity threshold (recommended: 10-15)
@@ -336,8 +343,13 @@ $(ENVTEST): $(LOCALBIN)
 
 .PHONY: golangci-lint
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
-$(GOLANGCI_LINT): $(LOCALBIN)
-	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+$(GOLANGCI_LINT): | $(LOCALBIN)
+	$(call go-install-versioned-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+
+.PHONY: gosec-install
+gosec-install: $(GOSEC) ## Download gosec locally if necessary.
+$(GOSEC): | $(LOCALBIN)
+	$(call go-install-versioned-tool,$(GOSEC),github.com/securego/gosec/v2/cmd/gosec,$(GOSEC_VERSION))
 
 # go-install-tool will 'go install' any package with custom target and target path
 define go-install-tool
@@ -347,4 +359,12 @@ package=$(2)@$(3) ;\
 echo "Downloading $${package}" ;\
 GOBIN=$(LOCALBIN) go install $${package} ;\
 }
+endef
+
+# go-install-versioned-tool installs package $(2) at version $(3) as $(1), a path that carries
+# the version.
+define go-install-versioned-tool
+@echo "Downloading $(2)@$(3)"
+@GOBIN=$(LOCALBIN) go install $(2)@$(3)
+@mv $(LOCALBIN)/$(notdir $(2)) $(1)
 endef

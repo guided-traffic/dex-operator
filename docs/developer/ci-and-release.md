@@ -49,3 +49,24 @@ Automated dependency updates on a schedule. `conventional-changelog-conventional
 v9 (major updates disabled in `renovate.json`): with v10,
 `@semantic-release/release-notes-generator` silently drops all commits and the release notes come
 out empty.
+
+**Indirect Go modules** (`// indirect` in `go.mod`) get minor, patch and digest updates; their majors
+stay disabled, because a transitive module's next major is a different module path that
+controller-runtime and the Kubernetes modules still pin to the old one. The gomod manager extracts
+indirect requirements disabled, and the enable rule is evaluated before the lookup, where no update
+type exists yet. That rule therefore must not carry `matchUpdateTypes` or any other post-lookup
+matcher: it would never match, and no indirect module would be looked up at all — that is how
+`golang.org/x/net` stayed on a vulnerable release. A second rule after it takes the majors back out.
+
+**The Go version group** (`renovate/go-version`) carries the toolchain (`go.mod`, `Containerfile`,
+`GO_VERSION` in [release.yml](../../.github/workflows/release.yml)), `golang.org/x/*`, and the minor
+and patch updates of golangci-lint and gosec — the `# renovate:` annotated `*_VERSION` variables in
+the [Makefile](../../Makefile). Both analysers read the compiler's export data through
+`golang.org/x/tools`, and a toolchain release can raise its version beyond what the pinned release
+decodes: Go 1.27.2 writes version 5, and golangci-lint v2.13.1 and gosec v2.29.0 failed `typecheck`
+on every package. In one branch, the toolchain update stays red until the analyser release that
+reads it is out, then Renovate adds that release to the branch and the pipeline reruns. In separate
+branches the analyser update would merge alone and leave the toolchain PR red on its old run, since
+Renovate rebases only on a conflict (`rebaseWhen: conflicted`). While gosec has no release on a new
+enough `golang.org/x/tools`, `GOSEC_VERSION` can be a master pseudo-version; Renovate replaces it
+with the next release.
