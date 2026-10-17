@@ -301,7 +301,7 @@ ENVTEST_VERSION ?= release-0.19
 # newer release of both. Renovate updates the annotated versions (customManagers:makefileVersions)
 # in the "Go version" group, together with the toolchain.
 # renovate: datasource=go depName=github.com/golangci/golangci-lint/v2
-GOLANGCI_LINT_VERSION ?= v2.14.0
+GOLANGCI_LINT_VERSION ?= v2.15.0
 # renovate: datasource=go depName=github.com/securego/gosec/v2
 GOSEC_VERSION ?= v2.29.1-0.20261009120814-7b1b5cebe007
 GOCYCLO_VERSION ?= v0.6.0
