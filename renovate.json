@@ -168,6 +168,28 @@
       ]
     },
     {
+      "description": "trivy-action and the Trivy binary (its version input): look them up over git. The aquasecurity organization has an IP allow list that rejects GitHub API calls, GraphQL and REST, made with an app installation token from the self-hosted runners, so the github-tags and github-releases lookups come back empty and both pins would never move. git ls-remote is not blocked.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchDepNames": [
+        "aquasecurity/trivy-action"
+      ],
+      "overrideDatasource": "git-tags",
+      "overridePackageName": "https://github.com/aquasecurity/trivy-action"
+    },
+    {
+      "description": "Trivy binary: see the rule above.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchDepNames": [
+        "aquasecurity/trivy"
+      ],
+      "overrideDatasource": "git-tags",
+      "overridePackageName": "https://github.com/aquasecurity/trivy"
+    },
+    {
       "description": "Helm charts: automerge minor and patch updates",
       "matchManagers": [
         "helm-values",

@@ -105,7 +105,11 @@ Node are `chore`: they run in CI only and reach neither the image nor the chart.
 release through the action's `version` input. The `container-malware-scan` job logs in to Docker Hub
 before Trivy runs, so a branch ref (it was `master`) would run whatever lands there next with the push
 credential on the runner. Upstream raises the binary's default on `master` without cutting an action
-release, hence the separate pin. Renovate's github-actions manager updates both.
+release, hence the separate pin. Renovate's github-actions manager updates both, but looks them up
+over git (`overrideDatasource: git-tags`): the `aquasecurity` organization has an IP allow list
+that rejects GitHub API calls made with an app installation token from the runners, GraphQL and REST
+alike, while `git ls-remote` passes. Through the API both lookups came back empty and the pins would
+never move.
 
 **Indirect Go modules** (`// indirect` in `go.mod`) get minor and patch updates. Their majors stay
 disabled, because a transitive module's next major is a different module path that
