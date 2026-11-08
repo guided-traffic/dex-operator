@@ -1,0 +1,60 @@
+name: Retry Renovate CI
+
+# A Renovate pull request whose pipeline failed stays red for good: GitHub's auto-merge waits for
+# the required checks, and Renovate pushes the branch again only on a conflict
+# (rebaseWhen: conflicted). A runner that drops out or a flaky test would park the update until
+# somebody reruns it by hand. This workflow reruns the failed jobs of such a pipeline once; a
+# second failure stays red for a human.
+on:
+  workflow_run:
+    workflows: [Test and Release]
+    types: [completed]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  rerun-failed-jobs:
+    name: Rerun failed jobs
+    # The first attempt of a pull-request pipeline on a Renovate branch of this repository only,
+    # never a fork's branch that carries the same prefix.
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.run_attempt == 1 &&
+      startsWith(github.event.workflow_run.head_branch, 'renovate/') &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: self-hosted
+    timeout-minutes: 5
+    steps:
+      # The rerun joins the pipeline's concurrency group, which cancels the run in progress for
+      # the pull request. If Renovate pushed the branch since, that run is the one that counts, so
+      # a pipeline for an older head is left alone.
+      - name: Rerun failed jobs
+        uses: actions/github-script@v9
+        env:
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        with:
+          script: |
+            const { RUN_ID, HEAD_BRANCH, HEAD_SHA } = process.env;
+            let head;
+            try {
+              const { data } = await github.rest.git.getRef({ ...context.repo, ref: `heads/${HEAD_BRANCH}` });
+              head = data.object.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              core.notice(`${HEAD_BRANCH} no longer exists; run ${RUN_ID} is not rerun.`);
+              return;
+            }
+            if (head !== HEAD_SHA) {
+              core.notice(`${HEAD_BRANCH} moved to ${head}; run ${RUN_ID} is for ${HEAD_SHA}, not rerun.`);
+              return;
+            }
+            await github.rest.actions.reRunWorkflowFailedJobs({
+              ...context.repo,
+              run_id: Number(RUN_ID),
+            });
+            core.notice(`Rerunning the failed jobs of run ${RUN_ID} on ${HEAD_BRANCH}.`);

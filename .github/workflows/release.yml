@@ -794,9 +794,14 @@ jobs:
           load: true
           tags: dex-operator:scan-${{ github.sha }}
 
+      # The action is pinned to a commit: the Docker Hub login above leaves the push credential on
+      # the runner while it runs, and a branch ref would run whatever lands on it next. `version`
+      # pins the Trivy binary apart from it, since upstream raises the binary's default on master
+      # without cutting an action release. Renovate updates both, in both steps.
       - name: Run Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.76.2
           image-ref: dex-operator:scan-${{ github.sha }}
           format: 'table'
           exit-code: '1'
@@ -807,8 +812,9 @@ jobs:
 
       - name: Run Trivy scan (SARIF output)
         if: always()
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.76.2
           image-ref: dex-operator:scan-${{ github.sha }}
           format: 'sarif'
           output: 'trivy-results.sarif'
@@ -825,6 +831,37 @@ jobs:
       - name: Cleanup scan image
         if: always()
         run: docker rmi dex-operator:scan-${{ github.sha }} || true
+
+  # The semantic-release job runs on main only, so without this job a pull request that changes
+  # .nvmrc or package.json is never run with Node or the release plugins before it merges. It
+  # starts the same toolchain on a pull request and stops before anything is published:
+  # semantic-release ends a pull-request run before its first plugin step, --dry-run would stop it
+  # before publishing anyway, and the job holds no token that could write.
+  release-toolchain:
+    if: github.event_name == 'pull_request'
+    name: Release Toolchain
+    runs-on: self-hosted
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Verify the integrity of provenance attestations and registry signatures for installed dependencies
+        run: npm audit signatures
+
+      - name: Start semantic-release without publishing
+        run: npx semantic-release --dry-run
 
   semantic-release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -871,10 +908,12 @@ jobs:
             echo "⚠️ Coverage badge not found, using existing file"
           fi
 
+      # .nvmrc pins the Node major, so a new LTS line arrives as a Renovate PR whose Release
+      # Toolchain check runs it on these runners first, never unannounced on main.
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "lts/*"
+          node-version-file: .nvmrc
 
       - name: Install dependencies
         run: npm install

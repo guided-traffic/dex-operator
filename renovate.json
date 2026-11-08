@@ -230,6 +230,32 @@
       "automerge": true
     },
     {
+      "description": "npm (semantic-release and its plugins): automerge minor and patch updates once every check is green. Renovate merges these itself (platformAutomerge off), because GitHub's auto-merge waits only for the required checks, and Release Toolchain, the one check that runs Node and the plugins on a pull request, is not among them.",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "automerge": true,
+      "platformAutomerge": false
+    },
+    {
+      "description": "Node (.nvmrc, the runtime of semantic-release): require manual review for major updates. The Release Toolchain check shows whether the new major starts on the self-hosted runners at all.",
+      "matchManagers": [
+        "nvm"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false,
+      "labels": [
+        "dependencies",
+        "major-update"
+      ]
+    },
+    {
       "description": "conventional-changelog-conventionalcommits: block major updates. Preset v10 targets the new conventional-changelog API; @semantic-release/release-notes-generator (conventional-changelog-writer v8) silently drops all commits with it, producing empty release notes. Re-enable once release-notes-generator supports the v10 preset.",
       "matchPackageNames": [
         "conventional-changelog-conventionalcommits"

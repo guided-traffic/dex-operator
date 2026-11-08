@@ -18,15 +18,39 @@ On pull requests to `main`, pushes to `main` and `workflow_dispatch`:
 | `integration-tests` | `make test-integration-coverage` |
 | `coverage-report` | merges both profiles; on a pull request comments the coverage against `main`'s badge, on `main` creates `.github/badges/coverage.json` as an artifact, which `semantic-release` commits |
 | `e2e-tests` | a Kind cluster, the image built and loaded with the kubectl image of the CRD hook, the chart installed, `make test-e2e` |
-| `semantic-release` | on a push to `main` only, after every job above |
+| `release-toolchain` | on a pull request only: Node from [.nvmrc](../../.nvmrc), `npm install`, `npm audit signatures`, `npx semantic-release --dry-run` |
+| `semantic-release` | on a push to `main` only, after every job above except `release-toolchain` |
 
 A new job goes into the `needs:` list of `semantic-release` in the same change, or a release can
-be cut without it.
+be cut without it. A job that runs on pull requests only stays out of it: a skipped job in `needs:`
+skips the release.
+
+`release-toolchain` is the one check that runs Node and the semantic-release plugins before a
+merge; without it a pull request that changes `.nvmrc` or `package.json` is first run on `main`.
+semantic-release loads its plugins and then ends a pull-request run before the first plugin step,
+`--dry-run` would stop it before publishing in any case, and the job's token can only read. It is not
+a required check of the `main` ruleset, which is why Renovate merges npm updates itself (below).
+
+**Node** is pinned to a major in [.nvmrc](../../.nvmrc), read by both Node jobs. It used to be
+`lts/*`: when Node 26 became the LTS line, `actions/setup-node` installed 26.13.0, which exits with
+code 127 on the self-hosted runners, and every release from 2026-11-02 on failed in `Setup Node.js`
+while all checks stayed green. Why 26 does not start there is not known; the job log shows only the
+exit code.
 
 There is one pipeline per pull request and per branch (`concurrency` in the workflow). A new push to
 a pull request — a Renovate rebase, for instance — cancels the run for the old head, whose checks
 no longer count. On `main` a running pipeline finishes; of the pushes queued behind it only the
 newest runs, since `semantic-release` publishes only when its commit is still the head of `main`.
+
+## Retry Renovate CI — [renovate-retry.yml](../../.github/workflows/renovate-retry.yml)
+
+On the completion of a Test and Release run. A Renovate pull request whose pipeline failed would stay
+red for good: GitHub's auto-merge waits, and Renovate pushes again only on a conflict
+(`rebaseWhen: conflicted`). A runner that loses its connection or a flaky test parks the update. The
+workflow reruns the failed jobs once — only for the first attempt of a pull-request run on a
+`renovate/` branch of this repository, and only while that run is still for the branch head, since
+a rerun joins the pull request's concurrency group and would cancel the run for a newer head. A
+second failure stays red for a human.
 
 ## Versioning
 
@@ -50,10 +74,26 @@ On `release: published`:
 
 ## Renovate — [renovate.yml](../../.github/workflows/renovate.yml), [renovate.json](../../renovate.json)
 
-Automated dependency updates on a schedule. `conventional-changelog-conventionalcommits` is held at
-v9 (major updates disabled in `renovate.json`): with v10,
-`@semantic-release/release-notes-generator` silently drops all commits and the release notes come
-out empty.
+Automated dependency updates daily, after every push to `main` and on `workflow_dispatch`. Minor
+and patch updates merge without a human once their checks are green; majors wait for review, except
+for GitHub Actions. Most updates use GitHub's auto-merge, which waits for the required checks of the
+`main` ruleset.
+
+**npm** (semantic-release and its plugins) minor and patch updates are merged by Renovate itself
+(`platformAutomerge: false`), at its next run after every check is green: the check that exercises
+them, `release-toolchain`, is not required, so GitHub's auto-merge would not wait for it.
+`conventional-changelog-conventionalcommits` is held at v9 (major updates disabled in
+`renovate.json`): with v10, `@semantic-release/release-notes-generator` silently drops all commits
+and the release notes come out empty.
+
+**Node** (`.nvmrc`) majors wait for review; `release-toolchain` shows on the pull request whether the
+new major starts on the runners.
+
+**trivy-action** is pinned to a commit with its version as a comment, and the Trivy binary to a
+release through the action's `version` input. The `container-malware-scan` job logs in to Docker Hub
+before Trivy runs, so a branch ref (it was `master`) would run whatever lands there next with the push
+credential on the runner. Upstream raises the binary's default on `master` without cutting an action
+release, hence the separate pin. Renovate's github-actions manager updates both.
 
 **Indirect Go modules** (`// indirect` in `go.mod`) get minor and patch updates. Their majors stay
 disabled, because a transitive module's next major is a different module path that
