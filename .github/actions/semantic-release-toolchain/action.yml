@@ -1,0 +1,38 @@
+# The semantic-release toolchain, prepared identically for its two callers in release.yml:
+# Release Toolchain on every pull request and Semantic Release on main. The pull-request job exists
+# to show that the release job will start, so whatever can drift between the two — the runtime
+# library, the Node version, the install command, the signature audit — lives here and nowhere else.
+name: Semantic-release toolchain
+description: Install Node from .nvmrc and the semantic-release dependencies, and verify their signatures.
+
+runs:
+  using: composite
+  steps:
+    # Node 26 links libatomic.so.1, and the stock actions-runner image of the self-hosted runners
+    # does not ship it: the loader exits with code 127 and setup-node reports "Node may not be
+    # installed". The image carries little beyond the docker CLI; a job installs what it needs.
+    - name: Install the Node runtime library the runner image lacks
+      shell: bash
+      run: |
+        set -euo pipefail
+        if ! ldconfig -p | grep 'libatomic\.so\.1 ' >/dev/null; then
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libatomic1
+        fi
+
+    # .nvmrc pins the Node major, so a new LTS line arrives as a Renovate pull request whose Release
+    # Toolchain check runs it on these runners first, never unannounced on main.
+    - name: Setup Node.js
+      uses: actions/setup-node@v7
+      with:
+        node-version-file: .nvmrc
+
+    # No dependency of the toolchain has an install script, and in the release job the checkout
+    # holds a token that can push: a script added by a compromised update does not get to run.
+    - name: Install dependencies
+      shell: bash
+      run: npm install --ignore-scripts
+
+    - name: Verify the integrity of provenance attestations and registry signatures for installed dependencies
+      shell: bash
+      run: npm audit signatures

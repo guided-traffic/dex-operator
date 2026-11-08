@@ -41,6 +41,7 @@ The tree, annotated. What each file of the Go packages is responsible for is
 ├── .github/
 │   ├── workflows/                   # release.yml (test and release), build.yml (images and chart), renovate.yml,
 │   │                                #   renovate-retry.yml (one rerun of a failed Renovate pipeline)
+│   ├── actions/semantic-release-toolchain/  # Node and the release plugins, for both Node jobs
 │   └── badges/coverage.json         # the README's coverage badge, written by semantic-release
 ├── Makefile                         # the single entry point for build, generate, test, lint
 ├── Containerfile                    # the manager image
