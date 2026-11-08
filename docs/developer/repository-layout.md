@@ -39,12 +39,14 @@ The tree, annotated. What each file of the Go packages is responsible for is
 │   ├── security/                    # the security architecture, one page per perspective
 │   └── tickets/                     # work lists; archive/ for finished ones
 ├── .github/
-│   ├── workflows/                   # release.yml (test and release), build.yml (images and chart), renovate.yml
+│   ├── workflows/                   # release.yml (test and release), build.yml (images and chart), renovate.yml,
+│   │                                #   renovate-retry.yml (one rerun of a failed Renovate pipeline)
 │   └── badges/coverage.json         # the README's coverage badge, written by semantic-release
 ├── Makefile                         # the single entry point for build, generate, test, lint
 ├── Containerfile                    # the manager image
 ├── .golangci.yml                    # linter configuration
 ├── .releaserc.json, package.json    # semantic-release and its plugins
+├── .nvmrc                           # the Node major semantic-release runs on
 └── renovate.json                    # dependency updates
 ```
 

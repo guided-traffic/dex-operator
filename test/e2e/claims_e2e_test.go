@@ -194,12 +194,13 @@ func TestE2E_PlatformClientTrustsTenantHeldPeer(t *testing.T) {
 		return len(ids) == 3 && reflect.DeepEqual(peers, []string{"kubectl"})
 	}, "platform client's trustedPeers still name the tenant-held peer")
 
-	var inst dexv1.DexInstallation
-	if err := e2eClient.Get(context.Background(), client.ObjectKey{Namespace: instNS, Name: "dex"}, &inst); err != nil {
-		t.Fatalf("get installation: %v", err)
-	}
+	// The reconcile writes the config Secret before it updates the status, so
+	// the rendered config above can be ahead of status.droppedTrustedPeers.
 	want := []dexv1.DroppedTrustedPeer{{Namespace: instNS, Name: "kubernetes", PeerID: "headlamp"}}
-	if !reflect.DeepEqual(inst.Status.DroppedTrustedPeers, want) {
-		t.Errorf("droppedTrustedPeers = %+v; want %+v", inst.Status.DroppedTrustedPeers, want)
-	}
+	e2eEventually(t, func() bool {
+		var inst dexv1.DexInstallation
+		key := client.ObjectKey{Namespace: instNS, Name: "dex"}
+		return e2eClient.Get(context.Background(), key, &inst) == nil &&
+			reflect.DeepEqual(inst.Status.DroppedTrustedPeers, want)
+	}, "status.droppedTrustedPeers is not", want)
 }

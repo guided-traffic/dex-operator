@@ -69,4 +69,6 @@ is for. Every list ends with `make lint`, `make cyclo` and the test tiers of
 ## A CI job
 
 The job in [release.yml](../../.github/workflows/release.yml), its name in the `needs:` list of
-`semantic-release`, and a row in [ci-and-release.md](ci-and-release.md).
+`semantic-release`, and a row in [ci-and-release.md](ci-and-release.md). A job that runs on pull
+requests only stays out of `needs:` — a skipped job there skips the release
+([ci-and-release.md](ci-and-release.md#test-and-release--releaseyml)).
