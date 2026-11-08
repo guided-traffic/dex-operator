@@ -833,10 +833,11 @@ jobs:
         run: docker rmi dex-operator:scan-${{ github.sha }} || true
 
   # The semantic-release job runs on main only, so without this job a pull request that changes
-  # .nvmrc or package.json is never run with Node or the release plugins before it merges. It
-  # starts the same toolchain on a pull request and stops before anything is published:
-  # semantic-release ends a pull-request run before its first plugin step, --dry-run would stop it
-  # before publishing anyway, and the job holds no token that could write.
+  # .nvmrc, package.json or the toolchain action is never run with Node or the release plugins
+  # before it merges. It prepares the same toolchain on a pull request, through the same action,
+  # and stops before anything is published: semantic-release ends a pull-request run before its
+  # first plugin step, --dry-run would stop it before publishing anyway, and the job holds no token
+  # that could write.
   release-toolchain:
     if: github.event_name == 'pull_request'
     name: Release Toolchain
@@ -849,16 +850,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Verify the integrity of provenance attestations and registry signatures for installed dependencies
-        run: npm audit signatures
+      - name: Prepare the semantic-release toolchain
+        uses: ./.github/actions/semantic-release-toolchain
 
       - name: Start semantic-release without publishing
         run: npx semantic-release --dry-run
@@ -908,18 +901,8 @@ jobs:
             echo "⚠️ Coverage badge not found, using existing file"
           fi
 
-      # .nvmrc pins the Node major, so a new LTS line arrives as a Renovate PR whose Release
-      # Toolchain check runs it on these runners first, never unannounced on main.
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Verify the integrity of provenance attestations and registry signatures for installed dependencies
-        run: npm audit signatures
+      - name: Prepare the semantic-release toolchain
+        uses: ./.github/actions/semantic-release-toolchain
 
       - name: Release
         env:

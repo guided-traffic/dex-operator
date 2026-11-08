@@ -18,7 +18,7 @@ On pull requests to `main`, pushes to `main` and `workflow_dispatch`:
 | `integration-tests` | `make test-integration-coverage` |
 | `coverage-report` | merges both profiles; on a pull request comments the coverage against `main`'s badge, on `main` creates `.github/badges/coverage.json` as an artifact, which `semantic-release` commits |
 | `e2e-tests` | a Kind cluster, the image built and loaded with the kubectl image of the CRD hook, the chart installed, `make test-e2e` |
-| `release-toolchain` | on a pull request only: Node from [.nvmrc](../../.nvmrc), `npm install`, `npm audit signatures`, `npx semantic-release --dry-run` |
+| `release-toolchain` | on a pull request only: the [toolchain action](../../.github/actions/semantic-release-toolchain/action.yml), then `npx semantic-release --dry-run` |
 | `semantic-release` | on a push to `main` only, after every job above except `release-toolchain` |
 
 A new job goes into the `needs:` list of `semantic-release` in the same change, or a release can
@@ -26,16 +26,25 @@ be cut without it. A job that runs on pull requests only stays out of it: a skip
 skips the release.
 
 `release-toolchain` is the one check that runs Node and the semantic-release plugins before a
-merge; without it a pull request that changes `.nvmrc` or `package.json` is first run on `main`.
-semantic-release loads its plugins and then ends a pull-request run before the first plugin step,
-`--dry-run` would stop it before publishing in any case, and the job's token can only read. It is not
-a required check of the `main` ruleset, which is why Renovate merges npm updates itself (below).
+merge; without it a pull request that changes `.nvmrc`, `package.json` or the toolchain action is
+first run on `main`. semantic-release loads its plugins and then ends a pull-request run before the
+first plugin step, `--dry-run` would stop it before publishing in any case, and the job's token can
+only read. It is not a required check of the `main` ruleset, which is why Renovate merges npm
+updates itself (below).
 
-**Node** is pinned to a major in [.nvmrc](../../.nvmrc), read by both Node jobs. It used to be
-`lts/*`: when Node 26 became the LTS line, `actions/setup-node` installed 26.13.0, which exits with
-code 127 on the self-hosted runners, and every release from 2026-11-02 on failed in `Setup Node.js`
-while all checks stayed green. Why 26 does not start there is not known; the job log shows only the
-exit code.
+Both Node jobs prepare the toolchain through one composite action,
+[semantic-release-toolchain](../../.github/actions/semantic-release-toolchain/action.yml), so the
+pull-request check cannot drift from the release it vouches for: it installs `libatomic1` if the
+runner lacks it, Node from [.nvmrc](../../.nvmrc), the dependencies with `npm install
+--ignore-scripts` (none has an install script, and in the release job the checkout holds a token
+that can push), and runs `npm audit signatures`.
+
+**The runners** are the stock `actions-runner` image, which carries little beyond the docker CLI;
+a job installs what it needs itself. Node 26 links `libatomic.so.1`, which the image does not ship:
+the loader exits with code 127 and `actions/setup-node` reports only "Node may not be installed".
+Node used to be `lts/*`, so when 26 became the LTS line every release from 2026-11-02 on failed in
+`Setup Node.js` while all checks stayed green. Since then `.nvmrc` pins the major, and a new one
+arrives as a Renovate pull request that `release-toolchain` runs first.
 
 There is one pipeline per pull request and per branch (`concurrency` in the workflow). A new push to
 a pull request — a Renovate rebase, for instance — cancels the run for the old head, whose checks
@@ -88,6 +97,9 @@ and the release notes come out empty.
 
 **Node** (`.nvmrc`) majors wait for review; `release-toolchain` shows on the pull request whether the
 new major starts on the runners.
+
+**Commit types**: a dependency update is a `fix`, so it cuts a patch release. GitHub Actions, npm and
+Node are `chore`: they run in CI only and reach neither the image nor the chart.
 
 **trivy-action** is pinned to a commit with its version as a comment, and the Trivy binary to a
 release through the action's `version` input. The `container-malware-scan` job logs in to Docker Hub

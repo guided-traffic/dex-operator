@@ -276,6 +276,14 @@
         "github-actions"
       ],
       "semanticCommitType": "chore"
+    },
+    {
+      "description": "npm and Node (the semantic-release toolchain): use 'chore' instead of 'fix'. Like GitHub Actions they run in CI only and reach neither the image nor the chart, so a 'fix' would cut an operator release that changes nothing for operators.",
+      "matchManagers": [
+        "npm",
+        "nvm"
+      ],
+      "semanticCommitType": "chore"
     }
   ],
   "customManagers": [
